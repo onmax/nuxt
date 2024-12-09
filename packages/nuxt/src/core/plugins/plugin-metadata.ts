@@ -6,9 +6,10 @@ import { createUnplugin } from 'unplugin'
 import MagicString from 'magic-string'
 import { normalize } from 'pathe'
 import { logger } from '@nuxt/kit'
-import { parseAndWalk } from 'oxc-walker'
 
-import type { ObjectPlugin, PluginMeta } from '#app'
+import type { ObjectPlugin, PluginMeta } from 'nuxt/app'
+
+import { parseAndWalk } from 'oxc-walker'
 
 const internalOrderMap = {
   // -50: pre-all (nuxt)
