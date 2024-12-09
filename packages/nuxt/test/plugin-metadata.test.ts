@@ -4,29 +4,26 @@ import { RemovePluginMetadataPlugin, extractMetadata } from '../src/core/plugins
 import { checkForCircularDependencies } from '../src/core/app'
 
 describe('plugin-metadata', () => {
-  it('should extract metadata from object-syntax plugins', async () => {
-    const properties = Object.entries({
-      name: 'test',
-      enforce: 'post',
-      hooks: { 'app:mounted': () => {} },
-      setup: () => { return { provide: { jsx: '[JSX]' } } },
-      order: 1,
+  const properties = Object.entries({
+    name: 'test',
+    enforce: 'post',
+    hooks: { 'app:mounted': () => {} },
+    setup: () => { return { provide: { jsx: '[JSX]' } } },
+    order: 1,
+  })
+  it.each(properties)('should extract metadata from object-syntax plugins', async (k, value) => {
+    const obj = [...properties.filter(([key]) => key !== k), [k, value]]
+
+    const meta = await extractMetadata([
+      'export default defineNuxtPlugin({',
+      ...obj.map(([key, value]) => `${key}: ${typeof value === 'function' ? value.toString().replace('"[JSX]"', '() => <span>JSX</span>') : JSON.stringify(value)},`),
+      '})',
+    ].join('\n'), 'file.tsx')
+
+    expect(meta).toEqual({
+      'name': 'test',
+      'order': 1,
     })
-
-    for (const item of properties) {
-      const obj = [...properties.filter(([key]) => key !== item[0]), item]
-
-      const meta = await extractMetadata([
-        'export default defineNuxtPlugin({',
-        ...obj.map(([key, value]) => `${key}: ${typeof value === 'function' ? value.toString().replace('"[JSX]"', '() => <span>JSX</span>') : JSON.stringify(value)},`),
-        '})',
-      ].join('\n'), 'file.tsx')
-
-      expect(meta).toEqual({
-        'name': 'test',
-        'order': 1,
-      })
-    }
   })
 
   const transformPlugin: any = RemovePluginMetadataPlugin({
