@@ -6,10 +6,10 @@ import type { SchemaDefinition } from 'untyped'
 import type { NitroConfig, NitroRuntimeConfig, NitroRuntimeConfigApp } from 'nitropack/types'
 import type { SnakeCase } from 'scule'
 import type { ResolvedConfig } from 'c12'
+import type { StandardSchemaV1 } from '../utils/standard-schema'
 import type { ConfigSchema } from './schema'
 import type { Nuxt } from './nuxt'
 import type { AppHeadMetaObject } from './head'
-import type { StandardSchemaV1 } from '../utils/standard-schema'
 
 export type { SchemaDefinition } from 'untyped'
 
