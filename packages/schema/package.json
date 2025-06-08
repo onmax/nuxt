@@ -76,6 +76,7 @@
     "webpack-dev-middleware": "7.4.2"
   },
   "dependencies": {
+    "@standard-schema/spec": "^1.0.0",
     "@vue/shared": "^3.5.16",
     "consola": "^3.4.2",
     "defu": "^6.1.4",

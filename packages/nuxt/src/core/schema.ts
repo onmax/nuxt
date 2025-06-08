@@ -10,6 +10,8 @@ import { generateTypes, resolveSchema as resolveUntypedSchema } from 'untyped'
 import type { Schema, SchemaDefinition } from 'untyped'
 import untypedPlugin from 'untyped/babel-plugin'
 import { createJiti } from 'jiti'
+import { formatStandardSchemaIssue, isStandardSchema, standardSchemaToJsonSchema, validateWithStandardSchema } from '@nuxt/schema'
+import type { StandardSchemaExtension, StandardSchemaV1 } from '@nuxt/schema'
 import { logger } from '../utils'
 
 export default defineNuxtModule({
@@ -95,14 +97,28 @@ export default defineNuxtModule({
       globalThis.defineNuxtSchema = (val: any) => val
 
       // Load schema from layers
-      const schemaDefs: SchemaDefinition[] = [nuxt.options.$schema]
+      const schemaDefs: SchemaDefinition[] = []
+      const standardSchemas: StandardSchemaV1[] = []
+
+      // Process the main config $schema
+      if (nuxt.options.$schema) {
+        if (isStandardSchema(nuxt.options.$schema)) {
+          standardSchemas.push(nuxt.options.$schema)
+          // Convert Standard Schema to JSON Schema for merging
+          const jsonSchema = await standardSchemaToJsonSchema(nuxt.options.$schema)
+          schemaDefs.push(jsonSchema)
+        } else {
+          schemaDefs.push(nuxt.options.$schema)
+        }
+      }
+
       for (const layer of nuxt.options._layers) {
         const filePath = await resolver.resolvePath(resolve(layer.config.rootDir, 'nuxt.schema'))
         if (filePath && existsSync(filePath)) {
-          let loadedConfig: SchemaDefinition
+          let loadedConfig: SchemaDefinition | StandardSchemaV1
           try {
             // TODO: fix type for second argument of `import`
-            loadedConfig = await _resolveSchema.import(filePath, { default: true }) as SchemaDefinition
+            loadedConfig = await _resolveSchema.import(filePath, { default: true }) as SchemaDefinition | StandardSchemaV1
           } catch (err) {
             logger.warn(
               'Unable to load schema from',
@@ -111,12 +127,74 @@ export default defineNuxtModule({
             )
             continue
           }
-          schemaDefs.push(loadedConfig)
+
+          if (isStandardSchema(loadedConfig)) {
+            standardSchemas.push(loadedConfig)
+            // Convert Standard Schema to JSON Schema for merging
+            const jsonSchema = await standardSchemaToJsonSchema(loadedConfig)
+            schemaDefs.push(jsonSchema)
+          } else {
+            schemaDefs.push(loadedConfig)
+          }
         }
       }
 
+      // Collect module-provided Standard Schemas
+      const moduleStandardSchemas: Record<string, StandardSchemaV1> = {}
+
       // Allow hooking to extend custom schemas
       await nuxt.hooks.callHook('schema:extend', schemaDefs)
+
+      // Process any Standard Schemas from modules via the new hook mechanism
+      nuxt.hooks.addHooks({
+        'schema:extend': (schemas: (SchemaDefinition | StandardSchemaExtension)[]) => {
+          for (const schemaOrExtension of schemas) {
+            // Check if this is a Standard Schema extension
+            if (typeof schemaOrExtension === 'object' && '$standardSchema' in schemaOrExtension && schemaOrExtension.$standardSchema) {
+              const standardSchema = schemaOrExtension.$standardSchema
+              // Store for validation later
+              const keys = Object.keys(schemaOrExtension).filter(key => key !== '$standardSchema')
+              for (const key of keys) {
+                moduleStandardSchemas[key] = standardSchema
+              }
+            }
+          }
+        },
+      })
+
+      // Validate configuration against Standard Schemas if any
+      if (standardSchemas.length > 0 || Object.keys(moduleStandardSchemas).length > 0) {
+        // Validate app-level schemas
+        for (const standardSchema of standardSchemas) {
+          const validationResult = await validateWithStandardSchema(standardSchema, nuxt.options)
+          if (!validationResult.success && validationResult.issues) {
+            const errorMessages = validationResult.issues.map(issue => formatStandardSchemaIssue(issue))
+            logger.error('❌ [Nuxt Schema] Standard Schema validation failed:')
+            for (const [index, message] of errorMessages.entries()) {
+              logger.error(`  ${index + 1}. ${message}`)
+            }
+            throw new Error('Configuration validation failed')
+          }
+        }
+
+        // Validate module-level schemas
+        for (const [configPath, standardSchema] of Object.entries(moduleStandardSchemas)) {
+          const configValue = configPath.split('.').reduce((obj, key) => obj?.[key], nuxt.options)
+          if (configValue !== undefined) {
+            const validationResult = await validateWithStandardSchema(standardSchema, configValue)
+            if (!validationResult.success && validationResult.issues) {
+              const errorMessages = validationResult.issues.map(issue => formatStandardSchemaIssue(issue))
+              logger.error(`❌ [Nuxt Schema] Standard Schema validation failed for "${configPath}":`)
+              for (const [index, message] of errorMessages.entries()) {
+                logger.error(`  ${index + 1}. ${message}`)
+              }
+              throw new Error(`Configuration validation failed for "${configPath}"`)
+            }
+          }
+        }
+
+        logger.success('✅ Standard Schema validation passed')
+      }
 
       // Resolve and merge schemas
       const schemas = await Promise.all(

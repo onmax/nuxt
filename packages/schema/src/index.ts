@@ -10,5 +10,9 @@ export type { Nuxt, NuxtApp, NuxtPlugin, NuxtPluginTemplate, NuxtTemplate, NuxtT
 export type { RouterConfig, RouterConfigSerializable, RouterOptions } from './types/router'
 export type { NuxtDebugContext, NuxtDebugModuleMutationRecord } from './types/debug'
 
+// Standard Schema support
+export type { StandardSchemaV1, ExtendedSchemaDefinition, StandardSchemaExtension } from './utils/standard-schema'
+export { isStandardSchema, standardSchemaToJsonSchema, validateWithStandardSchema, formatStandardSchemaIssue } from './utils/standard-schema'
+
 // Schema
 export { default as NuxtConfigSchema } from './config/index'

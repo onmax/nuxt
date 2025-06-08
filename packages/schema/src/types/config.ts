@@ -9,6 +9,7 @@ import type { ResolvedConfig } from 'c12'
 import type { ConfigSchema } from './schema'
 import type { Nuxt } from './nuxt'
 import type { AppHeadMetaObject } from './head'
+import type { StandardSchemaV1 } from '../utils/standard-schema'
 
 export type { SchemaDefinition } from 'untyped'
 
@@ -62,7 +63,7 @@ export interface NuxtConfig extends DeepPartial<Omit<ConfigSchema, 'vue' | 'vite
    * Experimental custom config schema
    * @see [Nuxt Issue #15592](https://github.com/nuxt/nuxt/issues/15592)
    */
-  $schema?: SchemaDefinition
+  $schema?: SchemaDefinition | StandardSchemaV1
 }
 
 export type NuxtConfigLayer = ResolvedConfig<NuxtConfig & {

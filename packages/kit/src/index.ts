@@ -6,7 +6,7 @@ export { getNuxtModuleVersion, hasNuxtModule, hasNuxtModuleCompatibility } from 
 // Loader
 export { loadNuxtConfig } from './loader/config'
 export type { LoadNuxtConfigOptions } from './loader/config'
-export { extendNuxtSchema } from './loader/schema'
+export { extendNuxtSchema, extendNuxtStandardSchema } from './loader/schema'
 export { buildNuxt, loadNuxt } from './loader/nuxt'
 export type { LoadNuxtOptions } from './loader/nuxt'
 
