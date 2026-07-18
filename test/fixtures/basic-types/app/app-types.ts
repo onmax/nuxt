@@ -160,6 +160,19 @@ describe('API routes', () => {
     })
   })
 
+  it('preserves generic response types', () => {
+    function useGenericData<T extends { message: string }> () {
+      expectTypeOf(useFetch<T>('/test').data.value?.message).toEqualTypeOf<string | undefined>()
+      expectTypeOf(useAsyncData<T>(() => $fetch('/test')).data.value?.message).toEqualTypeOf<string | undefined>()
+    }
+
+    type UnionResponse = { type: 'foo', foo: string } | { type: 'bar', bar: number }
+
+    expectTypeOf(useFetch<UnionResponse>('/test').data).toEqualTypeOf<Ref<UnionResponse | undefined>>()
+    expectTypeOf(useAsyncData(() => $fetch<UnionResponse>('/test'), { pick: ['type'] }).data)
+      .toEqualTypeOf<Ref<{ type: 'foo' } | { type: 'bar' } | undefined>>()
+  })
+
   // https://github.com/nuxt/nuxt/issues/35341
   it('accepts MaybeRefOrGetter for documented option fields', () => {
     const method = ref<'POST'>('POST')
