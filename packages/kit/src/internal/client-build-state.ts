@@ -35,6 +35,26 @@ export function saveClientBuildState (nuxt: Nuxt = useNuxt()): Record<string, un
   return saved
 }
 
+/**
+ * Mark the client build as running elsewhere, such as in another process. `saved` resolves
+ * with what `saveClientBuildState()` returned there, which is restored here once it arrives.
+ *
+ * @internal
+ */
+export function setPendingClientBuild (saved: Promise<Record<string, unknown>>, nuxt: Nuxt = useNuxt()): void {
+  nuxt._clientBuildStateReady = saved.then(state => restoreClientBuildState(state, nuxt))
+}
+
+/**
+ * Resolves once the client build state is in this process. Returns `undefined` when it
+ * already is, which is the case unless `setPendingClientBuild()` was called.
+ *
+ * @internal
+ */
+export function whenClientBuildStateReady (nuxt: Nuxt = useNuxt()): Promise<void> | undefined {
+  return nuxt._clientBuildStateReady
+}
+
 /** @internal */
 export function restoreClientBuildState (saved: Record<string, unknown>, nuxt: Nuxt = useNuxt()): void {
   for (const [key, state] of nuxt._clientBuildState ?? []) {

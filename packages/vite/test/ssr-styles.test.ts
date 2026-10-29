@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { afterAll, describe, expect, it } from 'vitest'
 import { buildNuxt, loadNuxt } from '@nuxt/kit'
+import { setPendingClientBuild } from '@nuxt/kit/internal'
+import type { Nuxt } from '@nuxt/schema'
 import { getRandomPort } from 'get-port-please'
 import type { Plugin } from 'vite'
 import { join } from 'pathe'
@@ -26,7 +28,24 @@ async function writeApp () {
   ].join('\n'))
 }
 
-async function build () {
+/**
+ * Builds the client environment at the same time as the ssr one and marks its state pending
+ * until it's done, as when the client builds in another process.
+ */
+function concurrentClientBuild (getNuxt: () => Nuxt): Plugin {
+  return {
+    name: 'concurrent-client-build',
+    buildApp (builder) {
+      const client = builder.environments.client!
+      const built = builder.build(client)
+      client.isBuilt = true
+      setPendingClientBuild(built.then(() => ({})), getNuxt())
+      return Promise.resolve()
+    },
+  }
+}
+
+async function build (options: { concurrentClient?: boolean } = {}) {
   const ssrTransforms: string[] = []
   const recorder: Plugin = {
     name: 'record-ssr-transforms',
@@ -37,16 +56,18 @@ async function build () {
     },
   }
 
+  const plugins = options.concurrentClient ? [recorder, concurrentClientBuild(() => nuxt)] : [recorder]
   const nuxt = await loadNuxt({
     cwd: tmpDir,
     ready: true,
     dev: false,
     overrides: {
+      buildId: 'ssr-styles-test',
       compatibilityDate: 'latest',
       devtools: { enabled: false },
       ssr: true,
       features: { inlineStyles: true },
-      vite: { plugins: [recorder] },
+      vite: { plugins },
     },
   })
 
@@ -97,5 +118,18 @@ describe('ssr styles', () => {
     }
     expect(html).not.toMatch(/<link[^>]+rel="stylesheet"/)
     expect(html).toMatch(/<p class="[^"]*_moduleClass_/)
+  }, 240 * 1000)
+
+  it('inlines the same styles when the client state arrives during the ssr build', async () => {
+    await rm(tmpDir, { recursive: true, force: true })
+    await writeApp()
+
+    await build()
+    const serial = await render()
+    await build({ concurrentClient: true })
+    const concurrent = await render()
+
+    expect(concurrent).toContain('margin:3px')
+    expect(concurrent).toBe(serial)
   }, 240 * 1000)
 })

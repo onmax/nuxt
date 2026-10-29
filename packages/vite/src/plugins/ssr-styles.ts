@@ -13,7 +13,7 @@ import { IS_CSS_RE, isCSS, isVue, parseModuleId } from '../utils/index.ts'
 import { withInlineQuery } from '../utils/inline-styles.ts'
 import { resolveClientEntry } from '../utils/config.ts'
 import escapeStringRegexp from 'escape-string-regexp'
-import { addClientBuildState, useServerBuild } from '@nuxt/kit/internal'
+import { addClientBuildState, useServerBuild, whenClientBuildStateReady } from '@nuxt/kit/internal'
 
 const SUPPORTED_FILES_RE = /\.(?:vue|(?:[cm]?j|t)sx?)$/
 const QUERY_RE = /\?.+$/
@@ -23,6 +23,10 @@ const STYLE_QUERY_RE = /[?&]type=style/
 // style blocks the server bundle reads exports from: `?inline` (inlined styles, custom elements) and CSS modules
 const STYLE_WITH_EXPORTS_RE = /[?&]inline(?:&|$)|\.module\.\w+$/
 const EMPTY_STYLE_ID = '\0nuxt:ssr-styles:empty'
+// loaded, but imported by nothing, to keep the ssr module phase open while the client state is pending
+const CLIENT_STATE_ID = '\0nuxt:ssr-styles:client-state'
+
+type StylesContext = Pick<Rollup.PluginContext, 'emitFile' | 'load' | 'parse' | 'resolve' | 'warn'>
 
 /**
  * Wrap a string `generateScopedName` pattern into a function that strips any
@@ -313,7 +317,7 @@ export function SSRStylesPlugin (nuxt: Nuxt): Plugin | undefined {
    * propagate to their imports. This runs per parse because reachability needs the importer
    * parsed, and chunks can no longer be emitted once the whole graph is known.
    */
-  async function markInlineOnlyReachable (ctx: Rollup.PluginContext, paths: Iterable<string>): Promise<void> {
+  async function markInlineOnlyReachable (ctx: StylesContext, paths: Iterable<string>): Promise<void> {
     const queue = [...paths]
     while (queue.length) {
       const path = queue.shift()!
@@ -331,10 +335,89 @@ export function SSRStylesPlugin (nuxt: Nuxt): Plugin | undefined {
   }
 
   /**
+   * When the client environment builds elsewhere (see `setPendingClientBuild`), the client
+   * state above arrives while the ssr build runs. Until then, extractions are queued in the
+   * order the bundler asked for them, since the first module to emit a shared stylesheet
+   * names its chunk. The work that doesn't need the client state runs at once: parsing each
+   * module, resolving its stylesheets and loading their inline variants. Chunks can only be
+   * emitted while modules load, so the load of `CLIENT_STATE_ID` keeps that phase open until
+   * the queue is empty.
+   */
+  let clientStateReady: Promise<void> | undefined
+  let pendingExtractions: Array<() => Promise<void>> | undefined
+  let extractionsDone: Promise<void> | undefined
+  let extractionError: unknown
+  // the plugin's own context, with cached resolutions, for queued extractions
+  let stylesContext: StylesContext | undefined
+  const preparedPrograms = new Map<string, ReturnType<Rollup.PluginContext['parse']>>()
+
+  /**
+   * Called from the first hook that queues an extraction, not from `buildStart`: Rolldown's
+   * `this.load()` loads nothing before the module phase has started.
+   */
+  function queueContext (ctx: Rollup.PluginContext): StylesContext {
+    if (stylesContext) { return stylesContext }
+    const queued = pendingExtractions!
+    extractionsDone = clientStateReady!.then(async () => {
+      while (queued.length) {
+        await queued.shift()!()
+      }
+      pendingExtractions = undefined
+    }).catch((error) => {
+      pendingExtractions = undefined
+      extractionError = error
+    })
+    // errors surface in `buildEnd`
+    ctx.load({ id: CLIENT_STATE_ID }).catch(() => {})
+    return stylesContext = cachingContext(ctx)
+  }
+
+  /** A context whose resolutions are kept, and whose parses `prepareInlineStyles` did, so a queued extraction can reuse them. */
+  function cachingContext (ctx: Rollup.PluginContext): StylesContext {
+    const resolutions = new Map<string, ReturnType<Rollup.PluginContext['resolve']>>()
+    return {
+      emitFile: file => ctx.emitFile(file),
+      load: options => ctx.load(options),
+      warn: warning => ctx.warn(warning),
+      parse: (code, options) => {
+        const program = preparedPrograms.get(code)
+        if (!program) { return ctx.parse(code, options) }
+        preparedPrograms.delete(code)
+        return program
+      },
+      resolve: (source, importer, options) => {
+        const key = JSON.stringify([source, importer ?? null, options ?? null])
+        let resolution = resolutions.get(key)
+        if (!resolution) {
+          resolutions.set(key, resolution = ctx.resolve(source, importer, options))
+        }
+        return resolution
+      },
+    }
+  }
+
+  /** The part of `extractInlineStyles` that doesn't depend on the client build. */
+  async function prepareInlineStyles (ctx: StylesContext, id: string, code: string): Promise<void> {
+    const { pathname, search } = parseModuleId(id)
+    if (!SUPPORTED_FILES_RE.test(pathname) || STYLE_QUERY_RE.test(search) || isCSS(search)) { return }
+    const program = ctx.parse(code)
+    preparedPrograms.set(code, program)
+    for (const specifier of getStaticImportSpecifiers(program)) {
+      if (!IS_CSS_RE.test(specifier) && !STYLE_QUERY_RE.test(specifier)) { continue }
+      const resolved = await ctx.resolve(specifier, id)
+      if (!resolved) { continue }
+      const [, res] = await Promise.all([ctx.resolve(resolved.id), ctx.resolve(withInlineQuery(resolved.id))])
+      if (res) {
+        await ctx.load({ id: res.id })
+      }
+    }
+  }
+
+  /**
    * Emit inline-style chunks for a module of the server build and record them in `cssMap`,
    * so the renderer can deliver its CSS as `<style>` tags.
    */
-  async function extractInlineStyles (ctx: Rollup.PluginContext, id: string, code: string, mayDefer = false): Promise<void> {
+  async function extractInlineStyles (ctx: StylesContext, id: string, code: string, mayDefer = false): Promise<void> {
     const { pathname, search } = parseModuleId(id)
 
     if (!(id in clientCSSMap) && !isInlineOnlyModule(pathname) && !isVue(pathname)) { return }
@@ -476,6 +559,12 @@ export function SSRStylesPlugin (nuxt: Nuxt): Plugin | undefined {
         name: `nuxt:ssr-styles:${environment.name}`,
         enforce: 'pre',
         buildStart () {
+          // without inlined styles, only islands and pages served without scripts read the client state
+          const readsClientState = options.shouldInline !== false || islandPaths.size > 0 || serverPagePaths.size > 0 || noScriptsPagePaths.size > 0
+          clientStateReady = environment.name === 'ssr' && readsClientState ? whenClientBuildStateReady(nuxt) : undefined
+          if (clientStateReady) {
+            pendingExtractions = []
+          }
           if (!envApi && this.environment.name === 'ssr') {
             const stylesPath = resolve(this.environment.config.build.outDir, 'styles.mjs')
             setBuildOutput('ssrStyles', () => [
@@ -511,9 +600,17 @@ export function SSRStylesPlugin (nuxt: Nuxt): Plugin | undefined {
             }
           },
         },
+        buildEnd () {
+          if (extractionError) {
+            this.error(extractionError as Error)
+          }
+        },
         load: {
-          filter: { id: new RegExp(`^${escapeStringRegexp(EMPTY_STYLE_ID)}$`) },
-          handler () {
+          filter: { id: new RegExp(`^(?:${escapeStringRegexp(EMPTY_STYLE_ID)}|${escapeStringRegexp(CLIENT_STATE_ID)})$`) },
+          async handler (id) {
+            if (id === CLIENT_STATE_ID) {
+              await extractionsDone
+            }
             return 'export {}'
           },
         },
@@ -639,6 +736,11 @@ export function SSRStylesPlugin (nuxt: Nuxt): Plugin | undefined {
             }
           }
           if (isInlineOnlyModule(importerId) || inlineOnlyReachable.has(importerId)) {
+            if (pendingExtractions) {
+              const ctx = queueContext(this)
+              pendingExtractions.push(() => markInlineOnlyReachable(ctx, imports))
+              return
+            }
             await markInlineOnlyReachable(this, imports)
           }
         },
@@ -718,6 +820,16 @@ export function SSRStylesPlugin (nuxt: Nuxt): Plugin | undefined {
               return
             }
 
+            if (pendingExtractions) {
+              const ctx = queueContext(this)
+              // only saves work for the queued extraction, which redoes whatever failed here
+              const prepared = prepareInlineStyles(ctx, id, code).catch(() => {})
+              pendingExtractions.push(async () => {
+                await prepared
+                await extractInlineStyles(ctx, id, code, true)
+              })
+              return
+            }
             await extractInlineStyles(this, id, code, true)
           },
         },

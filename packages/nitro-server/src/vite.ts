@@ -15,6 +15,7 @@ import type { Nitro, NitroHooks } from 'nitro/types'
 import type { Nuxt, NuxtBuildOutputs } from '@nuxt/schema'
 
 import type { NuxtServerRuntime } from '@nuxt/kit/internal'
+import { whenClientBuildStateReady } from '@nuxt/kit/internal'
 
 import { distDir, getServerReplacements, linkStaticDist } from './utils.ts'
 
@@ -260,7 +261,8 @@ const NITRO_VIRTUAL_PREFIX = '\0nuxt-nitro-virtual:'
  * resolves to `undefined` when the provider omits it.
  *
  * `entryChunkName` is excluded: `StableEntryPlugin` finalises it in the client
- * env's `writeBundle`, which completes before the ssr env loads it.
+ * env's `writeBundle`, which completes before the ssr env loads it. When the
+ * client builds elsewhere (`setPendingClientBuild`), `load` waits for its state.
  *
  * `ssrStyles` is deferred because the ssr environment cannot import its own
  * emitted `styles.mjs`; `SSRStylesPlugin` exposes the styles map as a code
@@ -373,6 +375,9 @@ function NuxtBuildOutputsPlugin (nuxt: Nuxt & { _nitro?: Nitro }, serverRuntime:
           return { code: statements.join('\n'), map: null }
         }
 
+        if (key === 'entryChunkName') {
+          await whenClientBuildStateReady(nuxt)
+        }
         const code = await nuxt.buildOutputs[key]()
         return { code: code ?? '', map: null }
       },
@@ -381,10 +386,13 @@ function NuxtBuildOutputsPlugin (nuxt: Nuxt & { _nitro?: Nitro }, serverRuntime:
       // The deferred providers are only final once this env's own
       // `generateBundle` has run: `post` so it follows `SSRStylesPlugin`'s ssr
       // `generateBundle` and the `ClientManifestPlugin` provider's lazy
-      // `build:manifest`.
+      // `build:manifest`. Most of them read client build state, which may still
+      // be on its way from a client build running elsewhere.
       order: 'post',
       async handler (_options, bundle) {
         if (nuxt.options.dev || this.environment?.name !== 'ssr') { return }
+
+        await whenClientBuildStateReady(nuxt)
 
         const replacements = new Map<string, string>()
         for (const [specifier, key] of Object.entries(outputs)) {

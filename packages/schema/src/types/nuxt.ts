@@ -344,6 +344,11 @@ export interface Nuxt {
    * @internal
    */
   '_clientBuildState'?: Map<string, { save: () => unknown, restore: (state: any) => void }>
+  /**
+   * Settles once the state of a client build running elsewhere has been restored.
+   * @internal
+   */
+  '_clientBuildStateReady'?: Promise<void>
 
   /** The resolved Nuxt configuration. */
   'options': NuxtOptions
