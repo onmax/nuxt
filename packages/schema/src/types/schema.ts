@@ -1327,6 +1327,18 @@ export interface ConfigSchema {
     typedPages: boolean
 
     /**
+     * Type-check `.vue` files with TypeScript 7.1 content mappers instead of `vue-tsc`.
+     *
+     * Registers `@vue/content-mapper` in `.nuxt/tsconfig.app.json` and moves what would go in
+     * `vueCompilerOptions` into its options. Needs `typescript@>=7.1` and `@vue/content-mapper`
+     * installed, and `tsc --runExternalCode`.
+     *
+     * @default false
+     * @see [TypeScript 7.1 content mappers](https://devblogs.microsoft.com/typescript/announcing-typescript-7-1-beta/)
+     */
+    contentMappers: boolean
+
+    /**
      * Load a client-side navigation that matches no page route as a full document, so the
      * server can respond with a public asset, a server route or its 404 page.
      *

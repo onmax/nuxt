@@ -307,6 +307,56 @@ describe('tsConfig generation', () => {
     }
   })
 
+  it('should keep vueCompilerOptions and register no content mappers by default', async () => {
+    const { tsConfig, legacyTsConfig } = await _generateTypes(mockNuxtWithOptions({
+      typescript: { tsConfig: { vueCompilerOptions: { strictTemplates: true } } },
+    }))
+    for (const config of [tsConfig, legacyTsConfig]) {
+      expect(config).toHaveProperty('vueCompilerOptions', { strictTemplates: true })
+      expect(config).not.toHaveProperty('contentMappers')
+    }
+  })
+
+  it('should move vueCompilerOptions into the vue content mapper with `experimental.contentMappers`', async () => {
+    const nuxt = mockNuxtWithOptions({
+      experimental: { contentMappers: true },
+      typescript: { tsConfig: { vueCompilerOptions: { strictTemplates: true } } },
+    })
+    nuxt.callHook = ((name: string, { tsConfig }: { tsConfig: { vueCompilerOptions: { plugins?: unknown[] } } }) => {
+      if (name === 'prepare:types') {
+        tsConfig.vueCompilerOptions.plugins = ['some-plugin']
+      }
+    }) as unknown as Nuxt['callHook']
+    const { tsConfig, legacyTsConfig } = await _generateTypes(nuxt)
+    for (const config of [tsConfig, legacyTsConfig]) {
+      expect(config).not.toHaveProperty('vueCompilerOptions')
+      expect(config).toHaveProperty('contentMappers', [{
+        package: '@vue/content-mapper',
+        extensions: ['.vue'],
+        options: { strictTemplates: true, plugins: ['some-plugin'] },
+      }])
+    }
+  })
+
+  it('should merge into a vue content mapper entry the user declares', async () => {
+    const { tsConfig } = await _generateTypes(mockNuxtWithOptions({
+      experimental: { contentMappers: true },
+      typescript: {
+        tsConfig: { vueCompilerOptions: { strictTemplates: true, plugins: ['nuxt-plugin'] } },
+        appTsConfig: {
+          contentMappers: [
+            { package: 'other-mapper', extensions: ['.foo'] },
+            { package: '@vue/content-mapper', extensions: ['.vue'], options: { strictTemplates: false, plugins: ['user-plugin'] } },
+          ],
+        } as NonNullable<NuxtConfig['typescript']>['appTsConfig'],
+      },
+    }))
+    expect(tsConfig).toHaveProperty('contentMappers', [
+      { package: 'other-mapper', extensions: ['.foo'] },
+      { package: '@vue/content-mapper', extensions: ['.vue'], options: { strictTemplates: false, plugins: ['user-plugin', 'nuxt-plugin'] } },
+    ])
+  })
+
   it('should reference module types in the order modules are registered', async () => {
     const modules = ['delayed-module-30', 'delayed-module-0', 'delayed-module-15']
     const { declaration, nodeDeclaration } = await _generateTypes(mockNuxtWithOptions({ modules }))

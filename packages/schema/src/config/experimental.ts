@@ -213,6 +213,7 @@ export default defineResolvers({
     typedPages: {
       $resolve: val => typeof val === 'boolean' ? val : true,
     },
+    contentMappers: false,
     serverPathFallback: {
       $resolve: val => typeof val === 'boolean' ? val : true,
     },

@@ -690,6 +690,10 @@ export async function _generateTypes (nuxt: Nuxt): Promise<GenerateTypesReturn> 
 
   await nuxt.callHook('prepare:types', { references, declarations, tsConfig, nodeTsConfig, nodeReferences, sharedTsConfig, sharedReferences, serverTsConfig, serverReferences })
 
+  if (nuxt.options.experimental?.contentMappers) {
+    useVueContentMapper(tsConfig)
+  }
+
   // Legacy tsConfig for backward compatibility
   const legacyTsConfig: TSConfig = defu({}, {
     ...tsConfig,
@@ -916,6 +920,31 @@ function renderReference (ref: TSReference, baseDir: string) {
 
 function tsBuildInfoFile (configName: string) {
   return `./cache/typecheck/${configName}.tsbuildinfo`
+}
+
+interface ContentMapperEntry {
+  package: string
+  extensions: string[]
+  options?: Record<string, any>
+}
+
+const VUE_CONTENT_MAPPER = '@vue/content-mapper'
+
+/**
+ * Register `@vue/content-mapper` for `.vue` files. The mapper does not read `vueCompilerOptions`,
+ * so its contents move into the entry's `options`, after any options the user gave the entry.
+ */
+function useVueContentMapper (tsConfig: TSConfig & { vueCompilerOptions?: Record<string, any>, contentMappers?: ContentMapperEntry[] }) {
+  const vueCompilerOptions = tsConfig.vueCompilerOptions ?? {}
+  delete tsConfig.vueCompilerOptions
+
+  tsConfig.contentMappers ||= []
+  let entry = tsConfig.contentMappers.find(entry => entry.package === VUE_CONTENT_MAPPER && entry.extensions.includes('.vue'))
+  if (!entry) {
+    entry = { package: VUE_CONTENT_MAPPER, extensions: ['.vue'] }
+    tsConfig.contentMappers.unshift(entry)
+  }
+  entry.options = defu(entry.options, vueCompilerOptions)
 }
 
 const RELATIVE_WITH_DOT_RE = /^([^.])/

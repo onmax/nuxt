@@ -9,7 +9,7 @@ import { resolveModulePath } from 'exsolve'
 import type { EditableTreeNode, Options as TypedRouterOptions } from 'vue-router/unplugin'
 import { defu } from 'defu'
 import { isEqual } from 'ohash'
-import { distDir } from '../dirs.ts'
+import { distDir, pkgDir } from '../dirs.ts'
 import { linkToAlias, logger } from '../utils.ts'
 import picomatch from 'picomatch'
 import { addRoute, createRouter, findRoute } from 'rou3'
@@ -435,6 +435,17 @@ export default defineNuxtModule({
       // Add vue-router volar plugins to tsconfig
       tsConfig.vueCompilerOptions ||= {}
       tsConfig.vueCompilerOptions.plugins ||= []
+
+      // `@vue/content-mapper` rejects Volar plugins; `<route>` blocks are not type-checked there
+      if (nuxt.options.experimental.contentMappers) {
+        if (useExperimentalTypedPages) {
+          tsConfig.vueCompilerOptions.plugins.push({
+            name: resolve(pkgDir, 'content-mapper/typed-router.cjs'),
+            options: { rootDir: nuxt.options.rootDir },
+          })
+        }
+        return
+      }
 
       // Always add <route> block support
       tsConfig.vueCompilerOptions.plugins.push('vue-router/volar/sfc-route-blocks')

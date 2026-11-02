@@ -64,6 +64,7 @@
   "files": [
     "app.d.ts",
     "bin",
+    "content-mapper",
     "types.d.ts",
     "types.d.mts",
     "dist",
