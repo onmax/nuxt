@@ -50,21 +50,17 @@ export async function appScanEntries (nuxt: Nuxt): Promise<string[]> {
     files.add(file)
   }
 
-  const entries = toEntryPatterns(files)
-
   for (const dirs of getLayerDirectories(nuxt).slice(1)) {
-    if (dirs.app.includes(NODE_MODULES)) {
-      const appDir = convertPathToPattern(dirs.app)
-      entries.push(`${appDir}**/*.{vue,js,jsx,mjs,ts,tsx,mts}`, `!${appDir}**/node_modules/**`)
-    }
-  }
-  for (const file of serverFiles) {
-    if (file.includes(NODE_MODULES)) {
-      entries.push('!' + convertPathToPattern(file))
+    if (!dirs.app.includes(NODE_MODULES)) { continue }
+    const layerFiles = await runWithNuxtContext(nuxt, () => resolveFiles(dirs.app, '**/*.{vue,js,jsx,mjs,ts,tsx,mts}', { ignore: ['**/node_modules/**'] }))
+    for (const file of layerFiles) {
+      if (!serverFiles.has(file)) {
+        files.add(file)
+      }
     }
   }
 
-  return entries
+  return toEntryPatterns(files)
 }
 
 /**

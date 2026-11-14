@@ -59,6 +59,7 @@ const files: Record<string, string> = {
   [join(rootDir, 'shared/utils/shared.mjs')]: 'shared-util-dep',
   [join(localLayerSrcDir, 'plugins/local.mjs')]: 'local-layer-dep',
   [join(layerSrcDir, 'composables/useLayer.mjs')]: 'layer-composable-dep',
+  [join(layerSrcDir, 'composables/useLayer.spec.ts')]: 'layer-test-only-dep',
   [join(aliasLayerSrcDir, 'utils/internal/helper.mjs')]: 'layer-alias-dep',
   [join(layerSrcDir, 'plugins/files.server.mjs')]: 'layer-server-only-dep',
   [join(flatRootDir, 'components/Flat.vue')]: 'flat-dep',
@@ -306,6 +307,13 @@ describe('appScanEntries', () => {
     await expect(optimizedDeps({ plugins: [OptimizeDepsPlugin(nuxt)] })).resolves.toContain('layer-alias-dep')
   })
 
+  it('should not scan ignored files of an installed layer', async () => {
+    const deps = await optimizedDeps({ entries: await appScanEntries(createNuxt({ layers: [installedLayer] })) })
+
+    expect(deps).toContain('layer-composable-dep')
+    expect(deps).not.toContain('layer-test-only-dep')
+  })
+
   it('should not scan server-only files of an installed layer', async () => {
     const nuxt = createNuxt({ layers: [installedLayer], app: { plugins: [{ src: join(layerSrcDir, 'plugins/files.server.mjs'), mode: 'server' }] } })
 
@@ -316,10 +324,10 @@ describe('appScanEntries', () => {
   })
 
   it('should not scan dependencies nested within an installed layer', async () => {
-    const entries = await appScanEntries(createNuxt({ layers: [installedLayer] }))
+    const deps = await optimizedDeps({ entries: await appScanEntries(createNuxt({ layers: [installedLayer] })) })
 
-    await expect(optimizedDeps({ entries: entries.filter(e => !e.startsWith('!')) })).resolves.toContain('hoisted-dep')
-    await expect(optimizedDeps({ entries })).resolves.not.toContain('hoisted-dep')
+    expect(deps).toContain('layer-dep')
+    expect(deps).not.toContain('hoisted-dep')
   })
 
   it('should group the files of a directory into one scan entry', async () => {
