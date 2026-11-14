@@ -5,14 +5,9 @@ import { addBuildPlugin, addComponent, addPlugin, addTemplate, addVitePlugin, de
 import { headDiagnostics } from '@nuxt/kit/internal'
 import type { NuxtOptions } from '@nuxt/schema'
 import { resolveModulePath } from 'exsolve'
-import { Unhead } from '@unhead/vue/vite'
-import { streamingIifeCode } from 'unhead/stream/iife'
 
 import { distDir } from '../dirs.ts'
 import { UnheadImportsPlugin } from './plugins/unhead-imports.ts'
-
-// the bootstrap code is a constant, so its content hash is known before the build runs
-const iifeChunkFileName = `streaming-iife.${createHash('sha256').update(streamingIifeCode).digest('hex').slice(0, 8)}.js`
 
 const components = ['NoScript', 'Link', 'Base', 'Title', 'Meta', 'Style', 'Head', 'Html', 'Body']
 
@@ -21,7 +16,7 @@ export default defineNuxtModule<NuxtOptions['unhead']>({
     name: 'nuxt:meta',
     configKey: 'unhead',
   },
-  setup (options, nuxt) {
+  async setup (options, nuxt) {
     const runtimeDir = resolve(distDir, 'head/runtime')
 
     // eslint-disable-next-line @typescript-eslint/no-deprecated
@@ -62,8 +57,9 @@ export default defineNuxtModule<NuxtOptions['unhead']>({
       const rolldownURL = rolldownPath ? pathToFileURL(rolldownPath).href : undefined
       const lightningcssURL = lightningcssPath ? pathToFileURL(lightningcssPath).href : undefined
 
-      addVitePlugin(() => {
+      addVitePlugin(async () => {
         const viteOptions = options.vite || {}
+        const { Unhead } = await import('@unhead/vue/vite')
         return Unhead({
           validate: !nuxt.options.test,
           minify: {
@@ -92,6 +88,10 @@ export default defineNuxtModule<NuxtOptions['unhead']>({
     const unheadPlugins = resolveNuxtUnhead('@unhead/vue/plugins')
 
     const ssrStreamingEnabled = typeof nuxt.options.experimental.ssrStreaming === 'object' && nuxt.options.experimental.ssrStreaming.enabled
+
+    // the bootstrap code is a constant, so its content hash is known before the build runs
+    const streamingIifeCode = ssrStreamingEnabled ? (await import('unhead/stream/iife')).streamingIifeCode : ''
+    const iifeChunkFileName = `streaming-iife.${createHash('sha256').update(streamingIifeCode).digest('hex').slice(0, 8)}.js`
 
     addTemplate({
       filename: 'unhead-options.mjs',
