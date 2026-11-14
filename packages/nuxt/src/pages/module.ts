@@ -337,7 +337,10 @@ export default defineNuxtModule({
       // Attempt incremental tree update for page file add/unlink in dev mode
       const layerIndex = pagesDirs.findIndex(dir => path.startsWith(dir))
 
-      if (pagesCtx && layerIndex !== -1 && !shouldAlwaysRegenerate) {
+      // a changed page leaves the route tree as it is, so only its metadata has to be read again
+      const contentOnly = event === 'change' && shouldAlwaysRegenerate
+
+      if (pagesCtx && layerIndex !== -1 && (contentOnly || !shouldAlwaysRegenerate)) {
         try {
           if (event === 'add') {
             const relativeToDir = relative(pagesDirs[layerIndex]!, path)
