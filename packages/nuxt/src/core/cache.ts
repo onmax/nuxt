@@ -8,7 +8,6 @@ import { hash, serialize } from 'ohash'
 import { glob } from 'tinyglobby'
 import { consola } from 'consola'
 import { basename, dirname, join, relative, resolve } from 'pathe'
-import { packTar, unpackTar } from 'modern-tar'
 import type { Plugin as VitePlugin } from 'vite'
 
 export async function getVueHash (nuxt: Nuxt) {
@@ -381,6 +380,7 @@ async function restoreCacheFromFile (cwd: string, cacheFile: string) {
   }
 
   const resolvedCwd = resolve(cwd) + '/'
+  const { unpackTar } = await import('modern-tar')
   const files = await unpackTar(await readFile(cacheFile))
   for (const file of files) {
     const name = file.header.name
@@ -423,6 +423,7 @@ async function writeCache (cwd: string, sources: string | string[], cacheFile: s
     patterns,
     cwd,
   })
+  const { packTar } = await import('modern-tar')
   const tarData = await packTar(fileEntries.map(({ name, data, attrs }) => ({
     header: {
       name,

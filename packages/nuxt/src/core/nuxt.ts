@@ -48,7 +48,6 @@ import { setupTypes } from './typescript.ts'
 import { addCoreBuildPlugins } from './build-plugins.ts'
 import { checkPeerVersion } from './peer-version.ts'
 import { addAppPlugin, addBuiltinsAfterModules, addBuiltinsAfterServer, addBuiltinsBeforeModules } from './builtins.ts'
-import { stripDebugProxies, trackModuleMutations } from './debug-module-mutation.ts'
 
 export function createNuxt (options: NuxtOptions): Nuxt {
   const hooks = createHooks<NuxtHooks>()
@@ -86,10 +85,6 @@ export function createNuxt (options: NuxtOptions): Nuxt {
     serverBuild: createServerBuild(options),
     runWithContext: fn => runWithNuxtContext(nuxt, fn),
     options,
-  }
-
-  if (options.experimental.debugModuleMutation) {
-    trackModuleMutations(nuxt, options)
   }
 
   // TODO: remove in nuxt v5
@@ -245,6 +240,7 @@ async function initNuxt (nuxt: Nuxt) {
   }
 
   if (nuxt.options.experimental.debugModuleMutation) {
+    const { stripDebugProxies } = await import('./debug-module-mutation.ts')
     stripDebugProxies(nuxt.options)
   }
 
@@ -460,6 +456,12 @@ export async function loadNuxt (opts: LoadNuxtOptions): Promise<Nuxt> {
   })
 
   const nuxt = createNuxt(options)
+
+  // `on-change` is only needed to record module mutations
+  if (options.experimental.debugModuleMutation) {
+    const { trackModuleMutations } = await import('./debug-module-mutation.ts')
+    trackModuleMutations(nuxt, options)
+  }
 
   if (perf) {
     perf.attach(nuxt)
