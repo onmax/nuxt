@@ -46,19 +46,14 @@ function traceFetchModule (environment: DevEnvironment): void {
 }
 
 function wrapPluginHook (plugin: Plugin, pluginName: string, hookName: typeof HOOKS_TO_TRACK[number], nuxt: Nuxt, tracing: boolean): void {
-  const original = plugin[hookName]
-  if (!original) { return }
-
-  if (typeof original === 'function') {
-    ;(plugin as any)[hookName] = function (this: any, ...args: any[]) {
-      return timedCall(original as (...a: any[]) => any, this, args, pluginName, hookName, nuxt, tracing)
-    }
-  } else if (typeof original === 'object' && 'handler' in original) {
-    const originalHandler = original.handler as (...a: any[]) => any
-    ;(original as { handler: (...a: any[]) => any }).handler = function (this: any, ...args: any[]) {
-      return timedCall(originalHandler, this, args, pluginName, hookName, nuxt, tracing)
-    }
+  const hook = plugin[hookName]
+  const handler = typeof hook === 'function' ? hook : hook?.handler
+  if (typeof handler !== 'function') { return }
+  const timed = function (this: any, ...args: any[]) {
+    return timedCall(handler as (...a: any[]) => any, this, args, pluginName, hookName, nuxt, tracing)
   }
+  // frozen plugins are left untimed rather than throwing
+  Reflect.set(plugin, hookName, typeof hook === 'function' ? timed : { ...hook, handler: timed })
 }
 
 function timedCall (fn: (...a: any[]) => any, ctx: any, args: any[], pluginName: string, hookName: typeof HOOKS_TO_TRACK[number], nuxt: Nuxt, tracing: boolean): any {

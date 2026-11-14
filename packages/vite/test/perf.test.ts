@@ -67,6 +67,24 @@ describe('PerfPlugin', () => {
     expect(recorded).toEqual([['test-plugin', 'resolveId', ctx]])
   })
 
+  it('should time frozen object hooks through a copy and leave frozen plugins untimed', () => {
+    const recorded: string[] = []
+    const timeBundlerHook = (name: string, hook: string, ctx: unknown, run: (ctx: unknown) => unknown) => {
+      recorded.push(`${name}:${hook}`)
+      return run(ctx)
+    }
+    const filter = { id: /\.ts$/ }
+    const plugin = { name: 'object-hook', transform: Object.freeze({ filter, order: 'pre' as const, handler: (code: string) => code + '!' }) }
+    const frozen = Object.freeze({ name: 'frozen', load: (id: string) => id })
+    const { load } = frozen
+    applyPerfPlugin(createNuxt({}, { timeBundlerHook } as any), [plugin, frozen])
+
+    expect(plugin.transform.handler('code')).toBe('code!')
+    expect(plugin.transform).toMatchObject({ filter, order: 'pre' })
+    expect(frozen.load).toBe(load)
+    expect(recorded).toEqual(['object-hook:transform'])
+  })
+
   it('should publish server module fetches on `nuxt.bundler.module`', async () => {
     const events = subscribe('nuxt.bundler.module')
     const ssr = { name: 'ssr', plugins: [], fetchModule: (id: string) => Promise.resolve({ code: id }) }
