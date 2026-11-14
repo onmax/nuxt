@@ -23,6 +23,8 @@ interface TransformPluginOptions {
    * one we scan for imports.
    */
   refreshImports?: (file: string) => void | Promise<void>
+  /** What a scanned file exports, so consumers are only invalidated when that changes. */
+  getExportSignature?: (file: string) => string | undefined
 }
 
 function isTransformed (options: Partial<ImportsOptions>, id: string) {
@@ -35,7 +37,10 @@ function isTransformed (options: Partial<ImportsOptions>, id: string) {
   return isVue(id, { type: ['script', 'template'] }) || isJS(id)
 }
 
-export const TransformPlugin = ({ ctx, options, sourcemap, refreshImports }: TransformPluginOptions) => createUnplugin(() => {
+export const TransformPlugin = ({ ctx, options, sourcemap, refreshImports, getExportSignature }: TransformPluginOptions) => createUnplugin(() => {
+  // the exports of each changed file the last time its consumers were invalidated, per environment
+  const invalidatedExports = new WeakMap<object, Map<string, string | undefined>>()
+
   // `$fetch` is not a global on the client, so code that relies on the global (including
   // module runtime code, which is not auto-imported) receives an import instead
   const fetchCtx = createUnimport({
@@ -84,9 +89,21 @@ export const TransformPlugin = ({ ctx, options, sourcemap, refreshImports }: Tra
           // The exports a file provides can change with its contents, so it has to be rescanned
           // before its consumers are transformed again - otherwise they keep the imports it used
           // to provide, and the module they resolve to no longer has them.
-          const pending = refreshImports?.(normalize(file))
+          const path = normalize(file)
+          const pending = refreshImports?.(path)
           if (!pending) { return }
           await pending
+
+          // consumers only embed the imports a file provides, which an edit to its body leaves as
+          // they were
+          let seen = invalidatedExports.get(this.environment)
+          if (!seen) {
+            seen = new Map()
+            invalidatedExports.set(this.environment, seen)
+          }
+          const signature = getExportSignature?.(path)
+          if (signature !== undefined && seen.has(path) && seen.get(path) === signature) { return }
+          seen.set(path, signature)
 
           // The injected imports live in the consumers' transform output, which is only
           // regenerated if their modules are invalidated as well.
