@@ -204,7 +204,9 @@ export default defineNuxtModule<Partial<ImportsOptions>>({
     // when the latest scan of the composable directories started, and the files it found exports in
     let lastScanStartedAt = Number.NEGATIVE_INFINITY
     let lastScannedFiles = new Set<string>()
-    const regenerateImports = async () => {
+    let lastScannedImports: Import[] | undefined
+    /** Rebuild the imports. Pass `rescan: false` to reuse the last scan of the composable directories. */
+    const regenerateImports = async ({ rescan = true } = {}) => {
       const scan = problems.scan()
       let registeredFiles = new Set<string>()
       await ctx.modifyDynamicImports(async (imports) => {
@@ -213,15 +215,18 @@ export default defineNuxtModule<Partial<ImportsOptions>>({
 
         // Scan for `composables/` and `utils/` directories
         if (options.scan) {
-          lastScanStartedAt = Date.now()
-          const scannedImports = await scanDirExports(composablesDirs, {
-            fileFilter: file => !isIgnored(file),
-          })
-          lastScannedFiles = new Set(scannedImports.map(i => i.from))
-          for (const i of scannedImports) {
-            i.priority ||= priorities.find(([dir]) => i.from.startsWith(dir))?.[1]
+          if (rescan || !lastScannedImports) {
+            lastScanStartedAt = Date.now()
+            lastScannedImports = await scanDirExports(composablesDirs, {
+              fileFilter: file => !isIgnored(file),
+            })
+            lastScannedFiles = new Set(lastScannedImports.map(i => i.from))
+            for (const i of lastScannedImports) {
+              i.priority ||= priorities.find(([dir]) => i.from.startsWith(dir))?.[1]
+            }
           }
-          imports.push(...scannedImports)
+          // `imports:extend` hooks may change the entries they are given
+          imports.push(...lastScannedImports.map(i => ({ ...i })))
         }
 
         // Modules extending
@@ -318,8 +323,10 @@ export default defineNuxtModule<Partial<ImportsOptions>>({
     // Watch for template generation
     nuxt.hook('app:templatesGenerated', async (_app, templates) => {
       // Only regenerate when non-imports templates are updated
+      // the files in the composable directories are rescanned when they change, so only
+      // `imports:extend` hooks, which may depend on the other templates, need to run again
       if (templates.some(t => !isImportsTemplate(t))) {
-        await regenerateImports()
+        await regenerateImports({ rescan: false })
       }
     })
   },
