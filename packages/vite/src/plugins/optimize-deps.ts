@@ -55,6 +55,8 @@ export function OptimizeDepsPlugin (nuxt: Nuxt): Plugin {
 
       const entries = config.optimizeDeps.entries
       config.optimizeDeps.entries = [...typeof entries === 'string' ? [entries] : entries || [], ...await appScanEntries(nuxt)]
+      // Vite only scans `.mts` entries when they are listed here
+      config.optimizeDeps.extensions = [...new Set([...config.optimizeDeps.extensions || [], '.mts'])]
 
       const include = config.optimizeDeps.include
       if (include?.length) {

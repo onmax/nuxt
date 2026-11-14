@@ -47,6 +47,7 @@ const files: Record<string, string> = {
   [join(srcDir, 'components/Highlight.server.vue')]: 'server-component-dep',
   [join(srcDir, 'components/islands/Chart.vue')]: 'island-dep',
   [join(srcDir, 'plugins/client.mjs')]: 'root-plugin-dep',
+  [join(srcDir, 'plugins/typed.mts')]: 'mts-plugin-dep',
   [join(srcDir, 'plugins/files.server.mjs')]: 'node-only-dep',
   [join(srcDir, 'plugins/stale.mjs')]: 'not-installed-dep',
   [join(srcDir, 'composables/useThing.mjs')]: 'composable-dep',
@@ -273,6 +274,12 @@ describe('appScanEntries', () => {
     expect(deps).toEqual(expect.arrayContaining(['flat-dep', 'flat-composable-dep']))
     expect(deps).not.toContain('script-only-dep')
     expect(deps).not.toContain('server-only-dep')
+  })
+
+  it('should scan registered `.mts` files', async () => {
+    const nuxt = createNuxt({ app: { plugins: [{ src: join(srcDir, 'plugins/typed.mts') }] } })
+
+    await expect(optimizedDeps({ plugins: [OptimizeDepsPlugin(nuxt)] })).resolves.toContain('mts-plugin-dep')
   })
 
   it('should keep scanning when a registered file imports a package that is not installed', async () => {
