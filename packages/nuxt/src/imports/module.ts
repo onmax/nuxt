@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { addBuildPlugin, addTemplate, addTypeTemplate, createIsIgnored, defineNuxtModule, getLayerDirectories, packageName, resolveAlias, resolveDeclarationPath, resolveTypePaths, updateTemplates, useNuxt } from '@nuxt/kit'
 import { headDiagnostics, useServerBuild } from '@nuxt/kit/internal'
 import { isAbsolute, join, normalize, relative, resolve } from 'pathe'
@@ -201,6 +201,9 @@ export default defineNuxtModule<Partial<ImportsOptions>>({
     const isIgnored = createIsIgnored(nuxt)
     const nuxtImportSources = new Set(allNuxtPresets.flatMap(i => i.from))
     const nuxtImports = new Set(presets.flatMap(p => nuxtImportSources.has(p.from) ? p.imports : []))
+    // when the latest scan of the composable directories started, and the files it found exports in
+    let lastScanStartedAt = Number.NEGATIVE_INFINITY
+    let lastScannedFiles = new Set<string>()
     const regenerateImports = async () => {
       const scan = problems.scan()
       let registeredFiles = new Set<string>()
@@ -210,9 +213,11 @@ export default defineNuxtModule<Partial<ImportsOptions>>({
 
         // Scan for `composables/` and `utils/` directories
         if (options.scan) {
+          lastScanStartedAt = Date.now()
           const scannedImports = await scanDirExports(composablesDirs, {
             fileFilter: file => !isIgnored(file),
           })
+          lastScannedFiles = new Set(scannedImports.map(i => i.from))
           for (const i of scannedImports) {
             i.priority ||= priorities.find(([dir]) => i.from.startsWith(dir))?.[1]
           }
@@ -256,12 +261,30 @@ export default defineNuxtModule<Partial<ImportsOptions>>({
       })
     }
 
+    /**
+     * Whether a scan that started after `path` last changed has already read it. The watcher and
+     * each Vite environment's `hotUpdate` all report the same edit, and only the first needs a scan.
+     */
+    function isScanned (path: string) {
+      let modified: number | undefined
+      try {
+        modified = statSync(path, { throwIfNoEntry: false })?.mtimeMs
+      } catch {
+        return false
+      }
+      // a removed file is covered once a scan no longer finds it
+      return modified === undefined ? !lastScannedFiles.has(path) : modified < lastScanStartedAt
+    }
+
     /** Rescan the files we scan for imports, deduping concurrent requests to do so. */
     let pendingRegeneration: Promise<void> | undefined
     let staleScan = false
     function refreshImports (path: string) {
       if (!options.scan || !composablesDirs.some(dir => dir === path || path.startsWith(dir + '/'))) {
         return
+      }
+      if (isScanned(path)) {
+        return pendingRegeneration ?? Promise.resolve()
       }
       if (pendingRegeneration) {
         // a change may land after the in-flight scan has already read the directory,
