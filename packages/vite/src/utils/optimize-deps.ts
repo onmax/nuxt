@@ -52,7 +52,9 @@ export async function appScanEntries (nuxt: Nuxt): Promise<string[]> {
 
   for (const dirs of getLayerDirectories(nuxt).slice(1)) {
     if (!dirs.app.includes(NODE_MODULES)) { continue }
-    const layerFiles = await runWithNuxtContext(nuxt, () => resolveFiles(dirs.app, '**/*.{vue,js,jsx,mjs,ts,tsx,mts}', { ignore: ['**/node_modules/**'] }))
+    // a layer without an `app/` directory also holds its config, server code, modules and public assets
+    const ignore = ['**/node_modules/**', 'nuxt.config.*', ...[dirs.server, dirs.modules, dirs.public].filter(dir => dir.startsWith(dirs.app)).map(dir => relative(dirs.app, dir) + '/**')]
+    const layerFiles = await runWithNuxtContext(nuxt, () => resolveFiles(dirs.app, '**/*.{vue,js,jsx,mjs,ts,tsx,mts}', { ignore }))
     for (const file of layerFiles) {
       if (!serverFiles.has(file)) {
         files.add(file)

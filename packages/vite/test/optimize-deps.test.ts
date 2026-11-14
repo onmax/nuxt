@@ -17,6 +17,7 @@ const layerSrcDir = join(layerRoot, 'app/')
 const aliasLayerRoot = join(rootDir, 'node_modules/alias-layer/')
 const aliasLayerSrcDir = join(aliasLayerRoot, 'app/')
 const aliasLayerCard = join(aliasLayerSrcDir, 'components/LayerCard.vue')
+const flatLayerRoot = join(rootDir, 'node_modules/flat-layer/')
 const moduleRuntime = join(rootDir, 'node_modules/installed-module/runtime/')
 const importsModuleRoot = join(rootDir, 'node_modules/installed-imports-module/')
 const importsModulePlugin = join(importsModuleRoot, 'runtime/plugin.mjs')
@@ -60,6 +61,12 @@ const files: Record<string, string> = {
   [join(localLayerSrcDir, 'plugins/local.mjs')]: 'local-layer-dep',
   [join(layerSrcDir, 'composables/useLayer.mjs')]: 'layer-composable-dep',
   [join(layerSrcDir, 'composables/useLayer.spec.ts')]: 'layer-test-only-dep',
+  [join(flatLayerRoot, 'components/Widget.vue')]: 'flat-layer-dep',
+  [join(flatLayerRoot, 'app.config.mjs')]: 'flat-layer-app-config-dep',
+  [join(flatLayerRoot, 'nuxt.config.mjs')]: 'flat-layer-config-dep',
+  [join(flatLayerRoot, 'server/api/data.mjs')]: 'flat-layer-server-dep',
+  [join(flatLayerRoot, 'modules/local.mjs')]: 'flat-layer-module-dep',
+  [join(flatLayerRoot, 'public/sw.js')]: 'flat-layer-public-dep',
   [join(aliasLayerSrcDir, 'utils/internal/helper.mjs')]: 'layer-alias-dep',
   [join(layerSrcDir, 'plugins/files.server.mjs')]: 'layer-server-only-dep',
   [join(flatRootDir, 'components/Flat.vue')]: 'flat-dep',
@@ -305,6 +312,16 @@ describe('appScanEntries', () => {
     const nuxt = createNuxt({ layers: [{ app: aliasLayerSrcDir, root: aliasLayerRoot }], app: { components: [{ filePath: aliasLayerCard }] as NuxtApp['components'] } })
 
     await expect(optimizedDeps({ plugins: [OptimizeDepsPlugin(nuxt)] })).resolves.toContain('layer-alias-dep')
+  })
+
+  it('should only scan app files of an installed layer without an `app/` directory', async () => {
+    const deps = await optimizedDeps({ entries: await appScanEntries(createNuxt({ layers: [{ app: flatLayerRoot, root: flatLayerRoot }] })) })
+
+    expect(deps).toEqual(expect.arrayContaining(['flat-layer-dep', 'flat-layer-app-config-dep']))
+    expect(deps).not.toContain('flat-layer-config-dep')
+    expect(deps).not.toContain('flat-layer-server-dep')
+    expect(deps).not.toContain('flat-layer-module-dep')
+    expect(deps).not.toContain('flat-layer-public-dep')
   })
 
   it('should not scan ignored files of an installed layer', async () => {
