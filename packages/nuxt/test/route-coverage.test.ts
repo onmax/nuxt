@@ -3,10 +3,10 @@ import { normalize } from 'pathe'
 import { withoutTrailingSlash } from 'ufo'
 import { describe, expect, it } from 'vitest'
 import type { Nitro, RouteRuleConfig } from 'nitro/types'
-import type { NitroInstance, NuxtPage } from 'nuxt/schema'
+import type { NitroInstance, Nuxt, NuxtPage } from 'nuxt/schema'
 
 import { loadNuxt } from '../src/index.ts'
-import { markPagesCoveredByRouteRule } from '../src/pages/route-coverage.ts'
+import { markPagesCoveredByRouteRule, markPagesForRouteRules } from '../src/pages/route-coverage.ts'
 
 function createNitro (rules: Record<string, RouteRuleConfig>) {
   const routes = Object.entries(rules).map(([route, data]) => ({ route, method: '', data }))
@@ -145,5 +145,27 @@ describe('markPagesCoveredByRouteRule', () => {
     expect(marks.get('/admin/:id()')).toBe(false)
     expect(marks.get('/dashboard')).toBe(true)
     expect(marks.get('/dashboard/:id()')).toBe(true)
+  })
+})
+
+describe('markPagesForRouteRules', () => {
+  const pages = (): NuxtPage[] => [
+    { path: '/admin', file: '/app/pages/admin.vue' },
+    { path: '/static', file: '/app/pages/static.vue' },
+    { path: '/', file: '/app/pages/index.vue' },
+  ]
+  const nuxt = () => ({ options: { srcDir: '/app' } }) as unknown as Nuxt
+
+  it('marks the pages that restricting rules cover', () => {
+    const nitro = createNitro({ '/admin': { ssr: false }, '/static': { noScripts: true }, '/': { swr: 60 } })
+    const restricted = markPagesForRouteRules(nuxt(), pages(), nitro as unknown as NitroInstance)
+    expect([...restricted].map(([page, kind]) => [page.path, kind])).toEqual([['/static', 'noScripts'], ['/admin', 'spaOnly']])
+  })
+
+  it('marks nothing when no rule restricts a page', () => {
+    const nitro = createNitro({ '/**': { ssr: true, swr: 60 }, '/admin': { noScripts: false } })
+    const target = nuxt()
+    expect(markPagesForRouteRules(target, pages(), nitro as unknown as NitroInstance).size).toBe(0)
+    expect(target.options._noScriptsPageSources).toEqual([])
   })
 })

@@ -16,27 +16,38 @@ export function markPagesForRouteRules (nuxt: Nuxt, pages: NuxtPage[], nitro: Ni
   const restrictedPages = new Map<NuxtPage, 'noScripts' | 'spaOnly'>()
   if (!nitro) { return restrictedPages }
 
-  markPagesCoveredByRouteRule(pages, nitro, {
-    isCovered: rules => !!rules.noScripts,
-    mark: (page, covered) => {
-      if (covered) { restrictedPages.set(page, 'noScripts') }
-    },
-  })
+  const isNoScripts = (rules: RouteRuleConfig) => !!rules.noScripts
+  const isSpaOnly = (rules: RouteRuleConfig) => rules.ssr === false
+  // the rules matching a path are merged, so they can only set a value one of them sets: without
+  // such a rule no page is covered, and walking every page to find that out can be skipped
+  const rules = nitro.routing?.routeRules.routes ?? []
+  const canCover = (isCovered: (rules: RouteRuleConfig) => boolean) => rules.some(rule => !!rule.data && isCovered(rule.data))
+
+  if (canCover(isNoScripts)) {
+    markPagesCoveredByRouteRule(pages, nitro, {
+      isCovered: isNoScripts,
+      mark: (page, covered) => {
+        if (covered) { restrictedPages.set(page, 'noScripts') }
+      },
+    })
+  }
 
   // server components render on the server by definition, whatever `ssr` says
   const conflicting: string[] = []
-  markPagesCoveredByRouteRule(pages, nitro, {
-    isCovered: rules => rules.ssr === false,
-    filter: page => page.mode !== 'server',
-    mark: (page, covered, resolvedPath) => {
-      if (!covered) { return }
-      if (restrictedPages.get(page) === 'noScripts') {
-        conflicting.push(resolvedPath)
-        return
-      }
-      restrictedPages.set(page, 'spaOnly')
-    },
-  })
+  if (canCover(isSpaOnly)) {
+    markPagesCoveredByRouteRule(pages, nitro, {
+      isCovered: isSpaOnly,
+      filter: page => page.mode !== 'server',
+      mark: (page, covered, resolvedPath) => {
+        if (!covered) { return }
+        if (restrictedPages.get(page) === 'noScripts') {
+          conflicting.push(resolvedPath)
+          return
+        }
+        restrictedPages.set(page, 'spaOnly')
+      },
+    })
+  }
 
   if (conflicting.length) {
     pageDiagnostics.NUXT_B4021({ paths: conflicting.map(path => `\`${path}\``).join(', ') })
