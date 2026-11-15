@@ -1,7 +1,6 @@
 import { existsSync } from 'node:fs'
 import type { EventType } from '@parcel/watcher'
 import type { FSWatcher } from 'chokidar'
-import { watch as chokidarWatch } from 'chokidar'
 import { createIsIgnored, directoryToURL, getAddDependencyCommand, getLayerDirectories, importModule, isIgnored, recoverThrottledChanges, useNuxt, writeTypes } from '@nuxt/kit'
 import { buildDiagnostics, useServerBuild } from '@nuxt/kit/internal'
 import { debounce } from 'perfect-debounce'
@@ -197,14 +196,15 @@ async function watch (nuxt: Nuxt) {
     if (success) { return }
   }
 
+  const { watch: chokidarWatch } = await import('chokidar')
   if (nuxt.options.experimental.watcher === 'chokidar') {
-    return createWatcher()
+    return createWatcher(chokidarWatch)
   }
 
-  return createGranularWatcher()
+  return createGranularWatcher(chokidarWatch)
 }
 
-function createWatcher () {
+function createWatcher (chokidarWatch: typeof import('chokidar').watch) {
   const nuxt = useNuxt()
   const isIgnored = createIsIgnored(nuxt)
 
@@ -247,7 +247,7 @@ function createWatcher () {
   })
 }
 
-function createGranularWatcher () {
+function createGranularWatcher (chokidarWatch: typeof import('chokidar').watch) {
   const nuxt = useNuxt()
   const isIgnored = createIsIgnored(nuxt)
 
