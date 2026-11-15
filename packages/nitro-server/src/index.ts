@@ -12,7 +12,7 @@ import { resolveDevAllowedHosts } from 'nuxt/internal/dev-error'
 import { createNitro } from 'nitro/builder'
 import type { Nitro, NitroOptions as NitroBuilderOptions, NitroConfig } from 'nitro/types'
 import { addPlugin, addTemplate, addVitePlugin, ensureDependencyInstalled, getAddDependencyCommand, getDirectory, getLayerDirectories, packageName, resolveAlias, resolveIgnorePatterns, resolveNuxtModule, resolveTypePaths } from '@nuxt/kit'
-import { bundlerDiagnostics, getServerRuntime, resolveSpaLoadingTemplate, resolveSpaLoadingTemplatePath, setServerBuild } from '@nuxt/kit/internal'
+import { bundlerDiagnostics, getServerRuntime, isCommonJSPackage, resolveSpaLoadingTemplate, resolveSpaLoadingTemplatePath, setServerBuild } from '@nuxt/kit/internal'
 import escapeRE from 'escape-string-regexp'
 import { defu } from 'defu'
 import { defineEventHandler } from 'nitro/h3'
@@ -386,7 +386,10 @@ export async function bundle (nuxt: Nuxt & { _nitro?: Nitro }): Promise<void> {
             '@nuxt/',
             nuxt.options.buildDir,
           ]),
-      ...nuxt.options.build.transpile.filter((i): i is string => typeof i === 'string').map(toTranspileNoExternal),
+      // Vite's dev module runner evaluates inlined code as ESM, so CommonJS packages stay external
+      ...nuxt.options.build.transpile
+        .filter((i): i is string => typeof i === 'string' && !(nuxt.options.dev && isCommonJSPackage(i, nuxt.options.modulesDir)))
+        .map(toTranspileNoExternal),
       // path entries apply when nitro bundles with rollup; in the vite dev
       // environment `noExternal` is matched against the bare package name
       'nuxt/dist',

@@ -21,6 +21,20 @@ describe('transpile patterns', () => {
   })
 })
 
+describe('server transpile patterns in development', () => {
+  it('leaves out CommonJS packages, which Vite\'s module runner cannot evaluate', () => {
+    // `typescript` is CommonJS, `vue` resolves to ESM under the `import` condition
+    const modulesDir = [fileURLToPath(new URL('../../../node_modules', import.meta.url))]
+    const nuxt = { options: { modulesDir, build: { transpile: ['typescript', 'vue', /regexp/] } } } as unknown as Nuxt
+
+    runWithNuxtContext(nuxt, () => {
+      expect(getTranspilePatterns({ isDev: true, isServer: true })).toEqual([/vue/, /regexp/])
+      expect(getTranspilePatterns({ isDev: false, isServer: true })).toEqual([/typescript/, /vue/, /regexp/])
+      expect(getTranspilePatterns({ isDev: true, isClient: true })).toEqual([/typescript/, /vue/, /regexp/])
+    })
+  })
+})
+
 // https://github.com/nuxt/nuxt/issues/33828
 describe('async transpile to optimizeDeps.exclude', () => {
   let capturedExclude: string[] = []

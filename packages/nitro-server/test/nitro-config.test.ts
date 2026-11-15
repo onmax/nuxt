@@ -143,6 +143,19 @@ describe('nitro config', () => {
     })
   })
 
+  it('leaves CommonJS `build.transpile` packages external in development', async () => {
+    // `typescript` is CommonJS, `vue` resolves to ESM under the `import` condition
+    const transpile = ['typescript', 'vue']
+    await withNitro({ dev: true, build: { transpile } }, (nitro) => {
+      const noExternals = nitro.options.noExternals as Array<string | RegExp>
+      expect(noExternals).not.toContain('typescript')
+      expect(noExternals).toContain('vue')
+    })
+    await withNitro({ dev: false, build: { transpile } }, (nitro) => {
+      expect(nitro.options.noExternals).toEqual(expect.arrayContaining(transpile))
+    })
+  }, 60_000)
+
   it('aliases `@vue/devtools-api` to a resolved path', async () => {
     await withNitro({}, (_nitro, nitroConfig) => {
       const alias = nitroConfig.alias!['@vue/devtools-api']!
