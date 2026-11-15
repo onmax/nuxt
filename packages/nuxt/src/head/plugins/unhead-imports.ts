@@ -2,7 +2,6 @@ import { createUnplugin } from 'unplugin'
 import { generateTransform, rolldownString } from 'rolldown-string'
 import type { Identifier, ImportSpecifier } from 'estree'
 import { normalize, relative } from 'pathe'
-import { unheadVueComposablesImports } from '@unhead/vue'
 import { genImport } from 'knitwork'
 import { parseAndWalk } from 'oxc-walker'
 import { headDiagnostics } from '@nuxt/kit/internal'
@@ -48,7 +47,9 @@ export const UnheadImportsPlugin = (options: UnheadImportsPluginOptions) => crea
         },
         code: { include: UnheadVueRE },
       },
-      handler (code, id, meta?: unknown) {
+      async handler (code, id, meta?: unknown) {
+        // `@unhead/vue` loads the Vue runtime, so it is only imported once a module uses it
+        const { unheadVueComposablesImports } = await import('@unhead/vue')
         const s = rolldownString(code, id, meta)
         const importsToAdd: ImportSpecifier[] = []
         parseAndWalk(code, id, function (node) {
