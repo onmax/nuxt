@@ -18,8 +18,7 @@ export function markPagesForRouteRules (nuxt: Nuxt, pages: NuxtPage[], nitro: Ni
 
   const isNoScripts = (rules: RouteRuleConfig) => !!rules.noScripts
   const isSpaOnly = (rules: RouteRuleConfig) => rules.ssr === false
-  // the rules matching a path are merged, so they can only set a value one of them sets: without
-  // such a rule no page is covered, and walking every page to find that out can be skipped
+  // the rules matching a path are merged, so a page is only covered when some rule sets the value
   const rules = nitro.routing?.routeRules.routes ?? []
   const canCover = (isCovered: (rules: RouteRuleConfig) => boolean) => rules.some(rule => !!rule.data && isCovered(rule.data))
 
