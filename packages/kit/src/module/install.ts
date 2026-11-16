@@ -33,6 +33,8 @@ interface ResolvedModule {
   meta: ModuleMeta | undefined
 }
 
+type ResolvedModuleDefinition = NonNullable<ReturnType<typeof resolveModuleWithOptions>>
+
 type ModuleOptionsFn = () => { defaults?: Record<string, unknown>, overrides?: Record<string, unknown> }
 
 function mergeModuleOptions (optionsFns: ModuleOptionsFn[], configured: unknown, inlineOptions?: Record<string, unknown>): Record<string, any> {
@@ -85,6 +87,8 @@ export async function installModules (modulesToInstall: Map<ModuleToInstall, Rec
   let error: Error | undefined
   const dependencyMap = new Map<ModuleToInstall, string>()
   const dependencyPaths = new Map<ModuleToInstall, string>()
+  // an optional dependency is only version-checked once we know the app installs it
+  const optionalVersionChecks: Array<{ name: string, module: ResolvedModuleDefinition, check: () => Promise<void> }> = []
   for (const [key, options] of modulesToInstall) {
     const loadPromise = moduleLoadCache.get(key) || loadNuxtModuleInstance(dependencyPaths.get(key) || key, nuxt)
     const res = await loadPromise.catch((err) => {
@@ -116,13 +120,21 @@ export async function installModules (modulesToInstall: Map<ModuleToInstall, Rec
       }
 
       if (value.version) {
-        const cachedDependency = await moduleLoadCache.get(resolvedModule.module)
-        const dependencyPath = cachedDependency?.resolvedModulePath || dependencyPaths.get(resolvedModule.module)
-        const resolvePaths = [dependencyPath || res.resolvedModulePath!, ...nuxt.options.modulesDir].filter(Boolean)
-        const pkg = await readPackageJSON(name, { from: resolvePaths }).catch(() => null)
-        if (pkg?.version && !satisfies(pkg.version, value.version, { includePrerelease: true })) {
-          const message = `Module \`${name}\` version (\`${pkg.version}\`) does not satisfy \`${value.version}\` (requested by ${moduleToAttribute}).`
-          error = new TypeError(message)
+        const version = value.version
+        const check = async () => {
+          const cachedDependency = await moduleLoadCache.get(resolvedModule.module)
+          const dependencyPath = cachedDependency?.resolvedModulePath || dependencyPaths.get(resolvedModule.module)
+          const resolvePaths = [dependencyPath || res.resolvedModulePath!, ...nuxt.options.modulesDir].filter(Boolean)
+          const pkg = await readPackageJSON(name, { from: resolvePaths }).catch(() => null)
+          if (pkg?.version && !satisfies(pkg.version, version, { includePrerelease: true })) {
+            const message = `Module \`${name}\` version (\`${pkg.version}\`) does not satisfy \`${version}\` (requested by ${moduleToAttribute}).`
+            error = new TypeError(message)
+          }
+        }
+        if (value.optional === true) {
+          optionalVersionChecks.push({ name, module: resolvedModule, check })
+        } else {
+          await check()
         }
       }
 
@@ -164,6 +176,12 @@ export async function installModules (modulesToInstall: Map<ModuleToInstall, Rec
       resolvedModulePath: res.resolvedModulePath,
       inlineOptions: options,
     })
+  }
+
+  for (const { name, module, check } of optionalVersionChecks) {
+    if (modulesToInstall.has(module.module) || modulesByMetaName.has(name) || (module.resolvedPath && resolvedModulePaths.has(module.resolvedPath))) {
+      await check()
+    }
   }
 
   if (error) {

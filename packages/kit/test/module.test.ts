@@ -248,6 +248,13 @@ describe('module dependencies', { concurrent: false }, () => {
     await expect(load([defineNuxtModule({ meta: { name: 'foo' }, moduleDependencies: { [name]: { version } } })])).rejects.toThrow(message)
   })
 
+  it('checks the version of an optional dependency only when the app installs it', async () => {
+    const dependent = defineNuxtModule({ meta: { name: 'foo' }, moduleDependencies: { 'some-module': { version: '>=2', optional: true } } })
+    await expect(load([dependent])).resolves.toBeDefined()
+    await nuxt?.close()
+    await expect(load(['some-module', dependent])).rejects.toThrow(/Module `some-module` version \(`1\.0\.0`\) does not satisfy `>=2`/)
+  })
+
   it('accounts for prerelease versions in module dependencies', async () => {
     await expect(load([defineNuxtModule({ meta: { name: 'foo' }, moduleDependencies: { 'prerelease-module': { version: '>=1' } } })])).resolves.toBeDefined()
   })
