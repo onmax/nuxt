@@ -81,7 +81,6 @@ export const PublicDirsPlugin = (options: VitePublicDirsPluginOptions): Plugin[]
         },
       },
       renderChunk: {
-        // only chunks with a root-relative `url()` can reference a public asset
         filter: { code: CSS_URL_SINGLE_RE },
         handler (code, chunk) {
           if (!isInlineStyleId(chunk.facadeModuleId)) { return }

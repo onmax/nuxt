@@ -12,7 +12,6 @@ export function RuntimePathsPlugin (): Plugin {
     applyToEnvironment: environment => environment.name === 'client',
     transform: {
       filter: {
-        // skip imports into css files and `<style>` blocks of vue files
         id: { exclude: [CSS_PATH_RE, VUE_STYLE_RE] },
         code: VITE_ASSET_RE,
       },

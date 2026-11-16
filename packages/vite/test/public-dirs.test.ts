@@ -44,12 +44,12 @@ describe('PublicDirsPlugin dev transform', () => {
   })
 
   it('only receives css modules with a root-relative url', () => {
-    const { filter } = PublicDirsPlugin({ dev: true, baseURL: '/cdn' })[0]!.transform as { filter: { id: RegExp, code: RegExp } }
-    expect(filter.id.test('/styles.css')).toBe(true)
-    expect(filter.id.test('/app.vue?vue&type=style&index=0&lang.scss')).toBe(true)
-    expect(filter.id.test('/app.ts')).toBe(false)
-    expect(filter.code.test(code)).toBe(true)
-    expect(filter.code.test('a{background:url(./logo.svg)}')).toBe(false)
+    const { filter } = PublicDirsPlugin({ dev: true, baseURL: '/cdn' })[0]!.transform as { filter?: { id: RegExp, code: RegExp } }
+    expect(filter?.id.test('/styles.css')).toBe(true)
+    expect(filter?.id.test('/app.vue?vue&type=style&index=0&lang.scss')).toBe(true)
+    expect(filter?.id.test('/app.ts')).toBe(false)
+    expect(filter?.code.test(code)).toBe(true)
+    expect(filter?.code.test('a{background:url(./logo.svg)}')).toBe(false)
   })
 })
 
