@@ -64,6 +64,52 @@ describe('applyRuntimeConfigSchema', () => {
     expect(config).toEqual({ port: 3000, name: '' })
   })
 
+  it('should report values that fail the checks of their schema', () => {
+    const { config, issues } = apply(
+      { public: { apiBase: 'https://api.example.com' }, port: 3000, secret: 'x'.repeat(32), email: 'a@b.co' },
+      {
+        p: {
+          public: { p: { apiBase: { t: 's', format: 'uri' } } },
+          port: { t: 'i', minimum: 1, maximum: 65535 },
+          secret: { t: 's', minLength: 32 },
+          email: { t: 's', format: 'email' },
+        },
+      },
+      { NUXT_PUBLIC_API_BASE: 'garbage', NUXT_PORT: '70000', NUXT_SECRET: 'short', NUXT_EMAIL: 'nope' },
+    )
+    expect(config).toEqual({ public: { apiBase: 'https://api.example.com' }, port: 3000, secret: 'x'.repeat(32), email: 'a@b.co' })
+    expect(issues).toEqual([
+      { path: 'public.apiBase', env: 'NUXT_PUBLIC_API_BASE', expected: 'string (URL)', received: 'garbage', public: true },
+      { path: 'port', env: 'NUXT_PORT', expected: 'integer (>= 1, <= 65535)', received: 70000 },
+      { path: 'secret', env: 'NUXT_SECRET', expected: 'string (at least 32 characters)', received: 'short' },
+      { path: 'email', env: 'NUXT_EMAIL', expected: 'string (email address)', received: 'nope' },
+    ])
+  })
+
+  it('should accept any value `new URL()` accepts for a URL', () => {
+    const schema: RuntimeConfigSchemaObject = { p: { url: { t: 's', format: 'uri' } } }
+    for (const url of ['postgres://u:p@db:5432/app', 'localhost:3000', 'foo:bar']) {
+      expect(apply({}, schema, { NUXT_URL: url }).issues).toEqual([])
+    }
+    for (const url of ['not-a-url', 'http://', 'https://exa mple.com']) {
+      expect(apply({}, schema, { NUXT_URL: url }).issues).toHaveLength(1)
+    }
+  })
+
+  it('should accept a match of a pattern regardless of case, as JSON Schema drops its flags', () => {
+    const schema: RuntimeConfigSchemaObject = { p: { key: { t: 's', pattern: '^sk_' }, digits: { t: 's', pattern: '^[^a-z]+$' } } }
+    expect(apply({}, schema, { NUXT_KEY: 'SK_live', NUXT_DIGITS: 'ABC' }).issues).toEqual([])
+    expect(apply({}, schema, { NUXT_KEY: 'pk_live' }).issues).toEqual([
+      { path: 'key', env: 'NUXT_KEY', expected: 'string (matching /^sk_/)', received: 'pk_live' },
+    ])
+  })
+
+  it('should try the next member of a union when a value fails its checks', () => {
+    const schema: RuntimeConfigSchemaObject = { p: { port: { o: [{ t: 'i', minimum: 1 }, { e: ['auto'] }] } } }
+    expect(apply({}, schema, { NUXT_PORT: 'auto' })).toEqual({ config: { port: 'auto' }, issues: [] })
+    expect(apply({}, schema, { NUXT_PORT: '0' }).issues).toHaveLength(1)
+  })
+
   it('should prefer the `NITRO_` prefix', () => {
     expect(apply({ name: '' }, { p: { name: 's' } }, { NITRO_NAME: 'nitro', NUXT_NAME: 'nuxt' }).config.name).toBe('nitro')
   })

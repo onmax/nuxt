@@ -29,12 +29,46 @@ describe('compileRuntimeConfigSchema', () => {
     })
     expect(compileRuntimeConfigSchema(schema)).toEqual({
       node: {
-        p: { secure: 'b', flag: 'b', port: 'i', mode: { e: ['dev', 'prod'] }, url: { o: ['s', 'z'] }, tags: { a: 's' } },
+        p: { secure: 'b', flag: 'b', port: 'i', mode: { e: ['dev', 'prod'] }, url: { o: [{ t: 's', format: 'uri' }, 'z'] }, tags: { a: 's' } },
         r: ['secure', 'flag', 'mode', 'url', 'tags'],
       },
       value: { secure: true, mode: 'dev', tags: [] },
       required: false,
     })
+  })
+
+  it('should keep the string and number checks of zod, valibot and arktype schemas', () => {
+    const port = { t: 'i', minimum: 1, maximum: 65535 }
+    expect(compileRuntimeConfigSchema(z.object({
+      url: z.url(),
+      secret: z.string().min(32),
+      port: z.number().int().min(1).max(65535),
+      ratio: z.number().gt(0).lt(1),
+      key: z.string().startsWith('sk_'),
+      id: z.uuid(),
+    })).node).toEqual({
+      p: {
+        url: { t: 's', format: 'uri' },
+        secret: { t: 's', minLength: 32 },
+        port,
+        ratio: { t: 'n', exclusiveMinimum: 0, exclusiveMaximum: 1 },
+        key: { t: 's', pattern: '^sk_.*' },
+        id: { t: 's', pattern: expect.any(String) },
+      },
+      r: ['url', 'secret', 'port', 'ratio', 'key', 'id'],
+    })
+    expect(compileRuntimeConfigSchema(toStandardJsonSchema(v.pipe(v.string(), v.url()))).node).toEqual({ t: 's', format: 'uri' })
+    expect(compileRuntimeConfigSchema(toStandardJsonSchema(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65535)))).node).toEqual(port)
+    expect(compileRuntimeConfigSchema(type('string.url')).node).toEqual({ t: 's', format: 'uri' })
+    expect(compileRuntimeConfigSchema(type('1 <= number.integer <= 65535')).node).toEqual(port)
+  })
+
+  it('should leave out the checks of an integer that are only its safe bounds', () => {
+    expect(compileRuntimeConfigSchema(z.number().int()).node).toBe('i')
+  })
+
+  it('should keep the type of a string with several patterns', () => {
+    expect(compileRuntimeConfigSchema(z.string().regex(/a/).regex(/b/)).node).toBe('s')
   })
 
   it('should resolve the default of a leaf schema', () => {
@@ -236,7 +270,7 @@ describe('getRuntimeConfigSchema', () => {
     expect(schema).toEqual({
       p: {
         port: 'n',
-        db: { p: { pool: 'n', url: 's' }, r: ['url'] },
+        db: { p: { pool: 'n', url: { t: 's', format: 'uri' } }, r: ['url'] },
         public: { p: { url: 's' } },
         apiSecret: 's',
       },
@@ -297,7 +331,7 @@ describe('getRuntimeConfigSchema', () => {
   it('should only describe declared schemas without inference', () => {
     const { config, entries } = extractRuntimeConfigSchemas({ port: 3000, db: { url: z.url(), pool: 5 } })
     expect(getRuntimeConfigSchema(config as Record<string, unknown>, entries, { infer: false })).toEqual({
-      p: { db: { p: { url: 's' }, r: ['url'] } },
+      p: { db: { p: { url: { t: 's', format: 'uri' } }, r: ['url'] } },
     })
   })
 

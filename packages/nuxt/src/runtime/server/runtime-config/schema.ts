@@ -1,4 +1,4 @@
-import type { RuntimeConfigSchemaNode, RuntimeConfigSchemaObject } from '@nuxt/schema/internal'
+import type { RuntimeConfigSchemaNode, RuntimeConfigSchemaNumber, RuntimeConfigSchemaObject, RuntimeConfigSchemaString } from '@nuxt/schema/internal'
 
 export interface RuntimeConfigEnvOptions {
   env: Record<string, string | undefined>
@@ -141,7 +141,7 @@ function isScalar (node: RuntimeConfigSchemaNode): boolean {
   if (typeof node === 'string') {
     return node !== '*'
   }
-  return 'e' in node || ('o' in node && node.o.every(isScalar))
+  return 't' in node || 'e' in node || ('o' in node && node.o.every(isScalar))
 }
 
 /**
@@ -177,6 +177,9 @@ function coerce (raw: string, node: RuntimeConfigSchemaNode): unknown {
       return parsed === INVALID ? raw : parsed
     }
   }
+  if ('t' in node) {
+    return coerce(raw, node.t)
+  }
   if ('e' in node) {
     const index = node.e.findIndex(value => typeof value === 'string' ? value === raw : JSON.stringify(value) === raw.trim())
     return index === -1 ? INVALID : node.e[index]
@@ -209,6 +212,9 @@ function check (value: unknown, node: RuntimeConfigSchemaNode): boolean {
     case '*':
       return true
   }
+  if ('t' in node) {
+    return check(value, node.t) && (node.t === 's' ? checkString(value as string, node) : checkNumber(value as number, node))
+  }
   if ('e' in node) {
     const serialized = JSON.stringify(value)
     return node.e.some(member => JSON.stringify(member) === serialized)
@@ -230,6 +236,38 @@ function check (value: unknown, node: RuntimeConfigSchemaNode): boolean {
   return true
 }
 
+function checkString (value: string, node: RuntimeConfigSchemaString): boolean {
+  return (node.minLength === undefined || value.length >= node.minLength)
+    && (node.maxLength === undefined || value.length <= node.maxLength)
+    && (node.pattern === undefined || matchesPattern(value, node.pattern))
+    && (node.format !== 'uri' || URL.canParse(value))
+    && (node.format !== 'email' || EMAIL_RE.test(value))
+}
+
+function checkNumber (value: number, node: RuntimeConfigSchemaNumber): boolean {
+  return (node.minimum === undefined || value >= node.minimum)
+    && (node.maximum === undefined || value <= node.maximum)
+    && (node.exclusiveMinimum === undefined || value > node.exclusiveMinimum)
+    && (node.exclusiveMaximum === undefined || value < node.exclusiveMaximum)
+}
+
+/** Looser than the email checks of Zod, Valibot and ArkType, so it never rejects a value they accept. */
+const EMAIL_RE = /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/
+
+/** JSON Schema drops the flags of a regular expression, such as `i`, so a match with any of them is accepted. */
+const PATTERN_FLAGS = ['u', '', 'imsu', 'ims']
+
+function matchesPattern (value: string, pattern: string): boolean {
+  const matches = PATTERN_FLAGS.map((flags) => {
+    try {
+      return new RegExp(pattern, flags).test(value)
+    } catch {
+      return undefined
+    }
+  })
+  return matches.includes(true) || matches.every(match => match === undefined)
+}
+
 function findObjectNode (node: RuntimeConfigSchemaNode, value: Record<string, unknown>): RuntimeConfigSchemaObject | undefined {
   if (typeof node === 'object' && 'o' in node) {
     const members = node.o.filter(isObjectNode)
@@ -249,6 +287,20 @@ function describe (node: RuntimeConfigSchemaNode): string {
     case 'b': return 'boolean'
     case 'z': return 'null'
     case '*': return 'any'
+  }
+  if ('t' in node) {
+    const checks = [
+      node.t === 's' && node.format === 'uri' && 'URL',
+      node.t === 's' && node.format === 'email' && 'email address',
+      node.t === 's' && node.minLength !== undefined && `at least ${node.minLength} characters`,
+      node.t === 's' && node.maxLength !== undefined && `at most ${node.maxLength} characters`,
+      node.t === 's' && node.pattern !== undefined && !node.format && `matching /${node.pattern}/`,
+      node.t !== 's' && node.minimum !== undefined && `>= ${node.minimum}`,
+      node.t !== 's' && node.exclusiveMinimum !== undefined && `> ${node.exclusiveMinimum}`,
+      node.t !== 's' && node.maximum !== undefined && `<= ${node.maximum}`,
+      node.t !== 's' && node.exclusiveMaximum !== undefined && `< ${node.exclusiveMaximum}`,
+    ].filter(Boolean)
+    return `${describe(node.t)} (${checks.join(', ')})`
   }
   if ('e' in node) {
     return node.e.map(value => JSON.stringify(value)).join(' | ')

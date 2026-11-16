@@ -18,5 +18,7 @@ export type {
 export type {
   RuntimeConfigSchemaEntry,
   RuntimeConfigSchemaNode,
+  RuntimeConfigSchemaNumber,
   RuntimeConfigSchemaObject,
+  RuntimeConfigSchemaString,
 } from './types/runtime-config.ts'

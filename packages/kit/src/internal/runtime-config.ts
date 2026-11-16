@@ -353,6 +353,9 @@ function resolveJSON (root: JSONSchema, schema: unknown): JSONSchema | undefined
 }
 
 function placeholder (node: RuntimeConfigSchemaNode, schema?: JSONSchema): unknown {
+  if (typeof node === 'object' && 't' in node) {
+    node = node.t
+  }
   if (typeof node === 'object') {
     return 'e' in node ? node.e[0] : 'o' in node ? placeholder(node.o[0]!) : 'a' in node ? [] : {}
   }
@@ -398,15 +401,16 @@ function toNode (schema: unknown, root: JSONSchema, seen: Set<unknown>): Runtime
     }))
   }
   if (Array.isArray(schema.allOf)) {
-    return schema.allOf.map(member => toNode(member, root, seen)).reduce(intersect, '*')
+    const { allOf, ...rest } = schema
+    return [rest, ...allOf].map(member => toNode(member, root, seen)).reduce(intersect, '*')
   }
   if (Array.isArray(schema.type)) {
     return union(schema.type.map(type => toNode({ ...schema, type }, root, seen)))
   }
   switch (schema.type) {
-    case 'string': return 's'
-    case 'number': return 'n'
-    case 'integer': return 'i'
+    case 'string': return withChecks('s', schema)
+    case 'number': return withChecks('n', schema)
+    case 'integer': return withChecks('i', schema)
     case 'boolean': return 'b'
     case 'null': return 'z'
     case 'array': return { a: isPlainObject(schema.items) ? toNode(schema.items, root, seen) : '*' }
@@ -421,6 +425,31 @@ function toNode (schema: unknown, root: JSONSchema, seen: Set<unknown>): Runtime
     return withRequired({ p }, required)
   }
   return '*'
+}
+
+const STRING_CHECKS = ['minLength', 'maxLength'] as const
+const NUMBER_CHECKS = ['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum'] as const
+const FORMATS = new Set(['uri', 'email'])
+
+/**
+ * Keep the checks of a string or number schema that the server can apply. Other formats are
+ * dropped, and so are the safe integer bounds Zod adds to every integer.
+ */
+function withChecks (t: 's' | 'n' | 'i', schema: JSONSchema): RuntimeConfigSchemaNode {
+  const checks: Record<string, unknown> = {}
+  for (const key of t === 's' ? STRING_CHECKS : NUMBER_CHECKS) {
+    const value = schema[key]
+    if (typeof value === 'number' && Math.abs(value) < Number.MAX_SAFE_INTEGER) {
+      checks[key] = value
+    }
+  }
+  if (t === 's' && typeof schema.pattern === 'string') {
+    checks.pattern = schema.pattern
+  }
+  if (t === 's' && typeof schema.format === 'string' && FORMATS.has(schema.format)) {
+    checks.format = schema.format
+  }
+  return Object.keys(checks).length ? { t, ...checks } as RuntimeConfigSchemaNode : t
 }
 
 function jsonDefault (schema: unknown, root: JSONSchema, seen = new Set<unknown>(), required = true): unknown {
@@ -526,7 +555,18 @@ function intersect (a: RuntimeConfigSchemaNode, b: RuntimeConfigSchemaNode): Run
     const serialized = new Set(bEnum.map(value => JSON.stringify(value)))
     return { e: aEnum.filter(value => serialized.has(JSON.stringify(value))) }
   }
-  return aEnum || b === '*' || (a === 'i' && b === 'n') ? a : b
+  if (aEnum || b === '*') {
+    return a
+  }
+  const aType = typeof a === 'object' && 't' in a ? a.t : a
+  const bType = typeof b === 'object' && 't' in b ? b.t : b
+  const numeric = (type: unknown) => type === 'n' || type === 'i'
+  if (typeof aType === 'string' && (aType === bType || (numeric(aType) && numeric(bType)))) {
+    const t = aType === 'i' || bType === 'i' ? 'i' : aType
+    const checks = { ...typeof b === 'object' && b, ...typeof a === 'object' && a, t }
+    return Object.keys(checks).length > 1 ? checks as RuntimeConfigSchemaNode : t as RuntimeConfigSchemaNode
+  }
+  return b
 }
 
 function overlay (inferred: RuntimeConfigSchemaNode, declared: RuntimeConfigSchemaNode): RuntimeConfigSchemaNode {
@@ -547,6 +587,9 @@ function overlay (inferred: RuntimeConfigSchemaNode, declared: RuntimeConfigSche
  * neither a value in `config` nor is required.
  */
 export function runtimeConfigSchemaToType (node: RuntimeConfigSchemaNode, config: unknown, indent = ''): string {
+  if (typeof node === 'object' && 't' in node) {
+    node = node.t
+  }
   switch (node) {
     case 's': return 'string'
     case 'n':
