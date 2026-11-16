@@ -103,6 +103,8 @@ export function ClientManifestPlugin (nuxt: Nuxt): Plugin {
         if (asset?.type === 'asset') {
           rawClientManifestSource = asset.source.toString()
           rawClientManifest = JSON.parse(rawClientManifestSource) as ViteClientManifest
+          // the server inlines the manifest, so it should not end up in the public output
+          delete bundle[manifestFileName]
         }
       },
     },

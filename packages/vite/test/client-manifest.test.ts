@@ -1,5 +1,7 @@
+import { existsSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
+import { join } from 'pathe'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { NuxtConfig } from 'nuxt/schema'
 import type { Manifest } from 'vue-bundle-renderer'
@@ -53,6 +55,13 @@ describe('client manifest', () => {
     expect(entries.length).toBeGreaterThan(1)
     expect(entries.some(entry => entry.isEntry && entry.file?.endsWith('.js'))).toBe(true)
     expect(entries.some(entry => entry.src?.endsWith('components/Lazy.vue'))).toBe(true)
+  }, 240 * 1000)
+
+  it.each([false, true])('does not write the client manifest to the public output (`nitroViteEnvironment: %s`)', async (nitroViteEnvironment) => {
+    await buildManifest(lazyApp, { pages: false, experimental: { nitroViteEnvironment } })
+
+    expect(existsSync(join(tmpDir, '.output/public/manifest.json'))).toBe(false)
+    expect(existsSync(join(tmpDir, '.output/public/_nuxt'))).toBe(true)
   }, 240 * 1000)
 
   it('fails with `NUXT_B7020` when a plugin disables the client manifest', async () => {
