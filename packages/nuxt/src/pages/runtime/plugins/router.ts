@@ -81,28 +81,30 @@ const plugin: Plugin<{ router: Router }> = defineNuxtPlugin({
 
     let startPosition: Parameters<RouterScrollBehavior>[2] | null
 
-    const router = createRouter({
-      ...routerOptions,
-      scrollBehavior: (to, from, savedPosition) => {
-        if (from === START_LOCATION) {
-          startPosition = savedPosition
-          return
+    const initialScrollBehavior: RouterScrollBehavior = (to, from, savedPosition) => {
+      if (from === START_LOCATION) {
+        startPosition = savedPosition
+        return
+      }
+      // eslint-disable-next-line @typescript-eslint/no-deprecated
+      if (routerOptions.scrollBehavior) {
+        // reset scroll behavior to initial value
+        // eslint-disable-next-line @typescript-eslint/no-deprecated
+        router.options.scrollBehavior = routerOptions.scrollBehavior
+        if ('scrollRestoration' in window.history) {
+          const unsub = router.beforeEach(() => {
+            unsub()
+            window.history.scrollRestoration = 'manual'
+          })
         }
         // eslint-disable-next-line @typescript-eslint/no-deprecated
-        if (routerOptions.scrollBehavior) {
-          // reset scroll behavior to initial value
-          // eslint-disable-next-line @typescript-eslint/no-deprecated
-          router.options.scrollBehavior = routerOptions.scrollBehavior
-          if ('scrollRestoration' in window.history) {
-            const unsub = router.beforeEach(() => {
-              unsub()
-              window.history.scrollRestoration = 'manual'
-            })
-          }
-          // eslint-disable-next-line @typescript-eslint/no-deprecated
-          return routerOptions.scrollBehavior(to, START_LOCATION, startPosition || savedPosition)
-        }
-      },
+        return routerOptions.scrollBehavior(to, START_LOCATION, startPosition || savedPosition)
+      }
+    }
+
+    const router = createRouter({
+      ...routerOptions,
+      scrollBehavior: initialScrollBehavior,
       history,
       routes,
       matcher: import.meta.server && staticRoutes ? getSharedMatcher(routes) : undefined,
@@ -458,7 +460,16 @@ const plugin: Plugin<{ router: Router }> = defineNuxtPlugin({
             }
             currentRoute.value = restoredRoute
             syncCurrentRoute()
-            router.replace({ ...resolvedInitialRoute, force: true }).catch(() => {})
+            // the restored route is the first navigation the browser sees, so it scrolls as one
+            // eslint-disable-next-line @typescript-eslint/no-deprecated
+            router.options.scrollBehavior = (to, from, savedPosition) => to.fullPath === resolvedInitialRoute.fullPath
+              ? initialScrollBehavior(to, from, savedPosition)
+              // eslint-disable-next-line @typescript-eslint/no-deprecated
+              : routerOptions.scrollBehavior?.(to, from, savedPosition)
+            router.replace({ ...resolvedInitialRoute, force: true }).catch(() => {}).finally(() => {
+              // eslint-disable-next-line @typescript-eslint/no-deprecated
+              router.options.scrollBehavior = routerOptions.scrollBehavior
+            })
           }
           // `<NuxtPage>` calls this before its mounted hooks flush; the hook is the fallback when
           // there is no page to render.

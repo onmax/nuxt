@@ -2703,11 +2703,14 @@ describe.skipIf(!oncePerEnv)('scroll restoration', () => {
     await page.close()
   })
 
-  it('restores the position when reloading a page with a hash', async () => {
-    const { page } = await renderPage('/scroll#section')
+  it.each([
+    ['server-rendered', '/scroll#section'],
+    ['prerendered', '/scroll/other#section'],
+  ])('restores the position when reloading a %s page with a hash', async (_, path) => {
+    const { page } = await renderPage(path)
     await scrollTo(page, 1000)
     await page.reload()
-    await waitForRoute(page, '/scroll#section')
+    await waitForRoute(page, path)
     await expectScrollY(page, 1000)
     await page.close()
   })

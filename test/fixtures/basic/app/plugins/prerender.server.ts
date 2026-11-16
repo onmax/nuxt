@@ -1,6 +1,6 @@
 export default defineNuxtPlugin((nuxtApp) => {
-  // Pretend to be prerendered, except for the pages that test scrolling on load
-  if (!useRoute().path.startsWith('/scroll')) {
+  // Pretend to be prerendered, except for the server-rendered scroll tests
+  if (useRoute().path !== '/scroll') {
     nuxtApp.payload.prerenderedAt = Date.now()
   }
 })
