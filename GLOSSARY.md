@@ -6,8 +6,6 @@ The terms the Nuxt docs (`docs/`), the config schema JSDoc (`packages/schema`) a
 
 Drafted by an AI agent (Claude Code); not yet reviewed by a human.
 
-Allow: prerendered, prerendering, auto-imported, auto-importing, Nuxt app, Nuxt apps
-
 ## Server route
 What: A handler in `server/api/` or `server/routes/`, or one a module adds with `addServerHandler`, that answers HTTP requests at a path.
 How: An API route is a server route under `/api`; "API endpoint" stays for an external API that `$fetch` calls; say "API route" only when the `/api` prefix matters. Server middleware runs before every server route and is not one. The function a server route or server middleware exports is its handler.
