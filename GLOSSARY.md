@@ -19,6 +19,12 @@ Bad:
 - Throw `createError` from a server endpoint
 Links:
 - [server/ directory](https://nuxt.com/docs/directory-structure/server#server-routes)
+Translations:
+- fr: route serveur
+- de: Server-Route
+Forms:
+- fr: `/routes? (?:de |du )?serveur/`
+- de: Server-Routen, Serverroute, Serverrouten
 
 ## Server handler
 What: A function registered with `defineHandler()` in `server/` or with `addServerHandler()`, which Nuxt runs as a server route or as server middleware.
@@ -83,6 +89,11 @@ Bad:
 - Selective pre-rendering
 Links:
 - [Prerendering](https://nuxt.com/docs/getting-started/prerendering)
+Translations:
+- de: Vorab-Rendering
+Forms:
+- en: prerendering
+- de: Prerendering, `/vorgerendert\p{L}*/`, `/vorab gerendert\p{L}*/`, vorab zu rendern
 
 ## Auto-import
 What: A Nuxt feature that makes components, composables, utilities and Vue APIs available without an `import` statement.
@@ -96,3 +107,98 @@ Bad:
 - Use auto imported composables
 Links:
 - [Auto-imports](https://nuxt.com/docs/guide/concepts/auto-imports)
+Translations:
+- fr: import automatique
+- de: automatischer Import
+Forms:
+- fr: `/import\p{L}* automatique/`, automatiquement import, `/import\p{L}* automatiquement/`
+- de: `/automatisch\p{L}* Import\p{L}*/`, `/automatisch importier\p{L}*/`, Auto-Import, Auto-Imports
+
+## Layer
+What: A Nuxt project, local or from a package, that an app extends with `extends` to share its config, components, pages and server code.
+Links:
+- [Layers](https://nuxt.com/docs/getting-started/layers)
+Translations:
+- fr: keep (couche)
+- de: keep
+Hints:
+- fr: the Nuxt layers feature (extends)
+- de: the Nuxt layers feature (extends); der Layer, die Layer (nicht "Schicht" oder "Ebene")
+
+## Payload
+What: The data the server render sends to the browser with the HTML, such as `useAsyncData` results and `useState` values, which the client reads instead of fetching again.
+Translations:
+- fr: keep (charge utile)
+- de: keep
+Hints:
+- fr: serialised server state sent to the client
+- de: serialised server state sent to the client (Nuxt Payload); die Payload
+
+## Hydration
+What: The step in the browser where Vue takes over the server-rendered HTML, attaches event listeners and makes the page interactive.
+Translations:
+- fr: hydratation
+- de: keep
+Forms:
+- fr: hydrat
+Hints:
+- de: In Nuxt-/Vue-Dokumentation „Hydration“ und „hydratisieren“ verwenden; nicht „Hydrierung“ oder „hydrieren“.
+
+## Directory
+What: A folder of the project, such as `app/pages/` or `server/`, whose files Nuxt reads by convention.
+Translations:
+- fr: répertoire
+- de: Verzeichnis
+Forms:
+- fr: répertoire, dossier
+- de: Verzeichnisse, Verzeichnissen, Verzeichnisses
+Hints:
+- de: streng "Verzeichnis", nicht "Ordner"
+
+## Bundle
+What: A JavaScript file the bundler writes from the app's modules, for the browser or for the server.
+Translations:
+- fr: keep
+- de: keep
+Hints:
+- de: Nomen beibehalten (das Bundle, der Bundler, das Bundling); als Verb „bündeln“ / „gebündelt“ verwenden.
+
+## Template
+What: The markup in a Vue component's `<template>` block, or a file a module generates into the build directory with `addTemplate()`.
+Translations:
+- fr: keep
+- de: Vorlage
+Forms:
+- de: Vorlagen, Template, Templates
+Hints:
+- de: Im Kontext von Projektvorlagen „Vorlage“; bei Vue- bzw. HTML-<template>-Tags bleibt das Code-Tag selbst unübersetzt.
+
+## Helper
+What: A small function that Nuxt, Kit or a module exports to wrap a common task, such as `defineNuxtConfig()` or `createResolver()`.
+Translations:
+- fr: keep
+- de: Hilfsprogramm
+Forms:
+- de: Hilfsprogramme, Hilfsprogramm
+Hints:
+- de: Für ein eigenständiges Hilfswerkzeug; wenn ausdrücklich eine Funktion gemeint ist, den separaten Begriff „helper function“ verwenden.
+
+## Package
+What: An npm package, such as `nuxt`, `@nuxt/kit` or a module, that a project installs into `node_modules`.
+Translations:
+- fr: package
+- de: Paket
+Forms:
+- fr: paquet
+- de: Pakete, Paketen, Pakets
+
+## Build
+What: The step `nuxt build` runs to bundle the app and its server into `.output/`, or the output it writes.
+Translations:
+- fr: translate
+- de: erzeugen
+Forms:
+- de: erzeugt, erzeugte, erzeugten, Erzeugung, Erzeugungen, Build, Builds
+Hints:
+- fr: as a noun keep "build" (le build, au moment du build); as a verb use "compiler" or "construire"
+- de: Kontextabhängig: als Verb „erzeugen“; als Substantiv „Build“ (z. B. ein Build) oder „Erzeugung“. Nicht „bauen“ oder „builden“.
