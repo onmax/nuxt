@@ -79,7 +79,7 @@
     "exsolve": "catalog:build",
     "fast-check": "catalog:dev",
     "get-port-please": "catalog:build",
-    "glosslint": "https://pkg.pr.new/glosslint@1428195",
+    "glosslint": "https://pkg.pr.new/glosslint@eea6ad3",
     "h3": "catalog:dev",
     "happy-dom": "catalog:dev",
     "hookable": "catalog:app-runtime",
